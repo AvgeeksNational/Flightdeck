@@ -750,6 +750,7 @@ $$('[data-tabs]').forEach(seg=>{
 
 // live subscriber tracker
 const CHANNEL_ID="UCB1F9vzpssj7umWJ3L8KdGA";
+const YT_KEY="AIzaSyAaztqX3GChdehgx3S6FozaxJTeZwibz1g";// YouTube Data API v3 key (restricted to the GitHub Pages site) for the live count outside Claude
 const STOPS=[[100,"First milestone"],[250,"Climbing"],[500,"Concorde boost"],[1000,"The big one"]];
 for(let g=2000;g<=10000;g+=1000)STOPS.push([g,g===10000?"Heavy status":"Climbing"]);
 for(let g=20000;g<=100000;g+=10000)STOPS.push([g,g===100000?"Silver play button":"Cruise altitude"]);
@@ -771,7 +772,10 @@ renderSubs(844,335163,177);
 function setLive(on,t){$$('.js-live').forEach(e=>e.classList.toggle('on',on));$$('.js-livetxt').forEach(e=>e.textContent=t);}
 (async()=>{
   const mcp=await (window.claude?.use?.("mcp")??Promise.resolve(null)).catch(()=>null);
-  if(!mcp)return;
+  if(!mcp){if(!YT_KEY)return;setLive(false,'Connecting…');
+    const pull=async()=>{try{const r=await fetch('https://www.googleapis.com/youtube/v3/channels?part=statistics&id='+CHANNEL_ID+'&key='+YT_KEY);const j=await r.json();const st=j.items&&j.items[0]&&j.items[0].statistics;
+      if(!st){setLive(false,'Live paused');return;}renderSubs(+st.subscriberCount,+st.viewCount,+st.videoCount);setLive(true,'LIVE · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}));}catch(e){setLive(false,'Live paused');}};
+    pull();setInterval(()=>{if(!document.hidden)pull();},60000);return;}
   setLive(false,'Connecting…');
   mcp.watchTool("vidIQ","vidiq_user_channels",null,ev=>{
     if(ev.type==='data'){
