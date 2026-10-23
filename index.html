@@ -1,3 +1,6 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>(function(){function f(){var h=window.innerHeight;document.documentElement.style.setProperty("--app-h",Math.round(h)+"px");}f();addEventListener("resize",f);addEventListener("orientationchange",function(){setTimeout(f,250)});})();</script>
 <title>Avgeeks National</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Mono:wght@400;600&family=Barlow:wght@400;500;600&display=swap">
@@ -19,7 +22,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{background:var(--board);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;margin:0;overflow:hidden;display:flex;flex-direction:column}
+html,body{height:100dvh;height:var(--app-h,100dvh)}
+body{padding-bottom:env(safe-area-inset-bottom,0px);background:var(--board);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;margin:0;overflow:hidden;display:flex;flex-direction:column}
 a{color:var(--amber)}
 button{font:inherit}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
@@ -774,14 +778,14 @@ function setLive(on,t){$$('.js-live').forEach(e=>e.classList.toggle('on',on));$$
   const mcp=await (window.claude?.use?.("mcp")??Promise.resolve(null)).catch(()=>null);
   if(!mcp){if(!YT_KEY)return;setLive(false,'Connecting…');
     const pull=async()=>{try{const r=await fetch('https://www.googleapis.com/youtube/v3/channels?part=statistics&id='+CHANNEL_ID+'&key='+YT_KEY);const j=await r.json();const st=j.items&&j.items[0]&&j.items[0].statistics;
-      if(!st){setLive(false,'Live paused');return;}renderSubs(+st.subscriberCount,+st.viewCount,+st.videoCount);setLive(true,'LIVE · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}));}catch(e){setLive(false,'Live paused');}};
+      if(!st){setLive(false,'Live paused');return;}renderSubs(+st.subscriberCount,+st.viewCount,+st.videoCount);checkMilestone(+st.subscriberCount);setLive(true,'LIVE · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}));}catch(e){setLive(false,'Live paused');}};
     pull();setInterval(()=>{if(!document.hidden)pull();},60000);return;}
   setLive(false,'Connecting…');
   mcp.watchTool("vidIQ","vidiq_user_channels",null,ev=>{
     if(ev.type==='data'){
       const p=ev.result.payload||{},ch=(p.channels||[]).find(c=>c.channelId===CHANNEL_ID);
       if(!ch||ch.subscriberCount==null){setLive(false,'Not linked in vidIQ');return;}
-      renderSubs(ch.subscriberCount,ch.viewCount,ch.videoCount);
+      renderSubs(ch.subscriberCount,ch.viewCount,ch.videoCount);checkMilestone(+ch.subscriberCount);
       const t=new Date(ev.result.cache?.storedAt||Date.now());
       setLive(true,'LIVE · '+t.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}));
     }else{
@@ -790,6 +794,92 @@ function setLive(on,t){$$('.js-live').forEach(e=>e.classList.toggle('on',on));$$
     }
   },{refetchInterval:60000});
 })();
+
+// ===== milestone celebration (1K and up) =====
+const CELEB_TEST=false; // TEST MODE: true plays a fake 1K celebration 3s after the page opens.
+let CELEB_ON=false,CELEB_LAST=null;
+function celebStyle(){if($('celebCss'))return;const st=document.createElement('style');st.id='celebCss';st.textContent=`
+#celeb{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 55%,#2a1f05 0%,#0d1218 62%,#06090c 100%);opacity:0;transition:opacity .5s;font-family:var(--body);color:#e8edf2;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#celeb.in{opacity:1}#celeb.out{opacity:0;transition:opacity .7s}
+#celeb canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#celeb .cb{position:relative;text-align:center;padding:0 16px;max-width:900px}
+#celeb .ey{font-family:var(--mono);letter-spacing:.32em;font-size:clamp(11px,1.6vw,15px);color:#ffb627;opacity:0;transform:translateY(8px);transition:all .6s .3s}
+#celeb.in .ey{opacity:1;transform:none}
+#celeb .num{display:flex;justify-content:center;gap:clamp(4px,1vw,10px);margin:14px 0 6px}
+#celeb .num span{font-family:var(--mono);font-weight:600;font-size:clamp(54px,15vw,170px);width:.82em;height:1.12em;display:grid;place-items:center;background:#1c2631;color:#ffb627;border-radius:10px;position:relative;box-shadow:inset 0 -4px 0 #0008,0 10px 30px #0008;transform:rotateX(90deg);transform-origin:50% 50%}
+#celeb .num span.cm{background:transparent;box-shadow:none;width:.35em}
+#celeb .num span::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:#000a}
+#celeb .num span.cm::after{display:none}
+#celeb .num span.go{animation:cflip .5s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes cflip{0%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+#celeb .num span.glow{animation:cflip .5s cubic-bezier(.2,1.6,.4,1) forwards,cglow 1.6s 1s ease-in-out infinite alternate}
+@keyframes cglow{to{color:#fff3c4;text-shadow:0 0 28px #ffb627aa}}
+#celeb .sub{font-family:var(--display);font-weight:900;font-size:clamp(30px,7vw,78px);letter-spacing:.04em;line-height:1;opacity:0;transform:scale(.6);transition:all .55s cubic-bezier(.2,1.5,.4,1) 1.9s}
+#celeb.in .sub{opacity:1;transform:none}
+#celeb .msg{margin-top:14px;font-size:clamp(15px,2.2vw,21px);color:#c9d3de;opacity:0;transition:opacity .6s 2.6s}
+#celeb.in .msg{opacity:1}
+#celeb .btn{margin-top:26px;display:inline-block;font-family:var(--display);font-weight:800;font-size:clamp(18px,2.6vw,24px);letter-spacing:.06em;background:#ffb627;color:#111;border:0;border-radius:999px;padding:12px 30px;opacity:0;transform:translateY(10px);transition:all .5s 3.2s;cursor:pointer;box-shadow:0 8px 24px #ffb62755}
+#celeb.in .btn{opacity:1;transform:none}
+#celeb .tag{position:absolute;top:max(12px,env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:#0d1218;background:#8b9aab;border-radius:4px;padding:3px 7px}
+#celeb .jet{position:absolute;left:0;top:0;font-size:clamp(34px,6vw,64px);will-change:transform;filter:drop-shadow(0 6px 10px #0009)}
+#celeb .ban{position:absolute;left:0;top:0;white-space:nowrap;font-family:var(--display);font-weight:800;letter-spacing:.06em;font-size:clamp(14px,2.2vw,22px);background:#e8edf2;color:#0d1218;padding:4px 14px;border-radius:3px;will-change:transform;box-shadow:0 6px 14px #0007}
+@media (prefers-reduced-motion:reduce){#celeb .num span{transform:none;animation:none!important}}
+`;document.head.appendChild(st);}
+function cabinChime(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ac=new AC();const t0=ac.currentTime+.05;
+  [[784,0],[622,.55]].forEach(([f,d])=>{const o=ac.createOscillator(),o2=ac.createOscillator(),g=ac.createGain();o.type='sine';o2.type='sine';o.frequency.value=f;o2.frequency.value=f*2;
+    const g2=ac.createGain();g2.gain.value=.25;o2.connect(g2);g2.connect(g);o.connect(g);g.connect(ac.destination);
+    g.gain.setValueAtTime(0,t0+d);g.gain.linearRampToValueAtTime(.32,t0+d+.02);g.gain.exponentialRampToValueAtTime(.001,t0+d+1.9);
+    o.start(t0+d);o2.start(t0+d);o.stop(t0+d+2);o2.stop(t0+d+2);});
+  if(ac.state==='suspended'){const go=()=>{removeEventListener('pointerdown',go);if(ac.state!=='closed')ac.resume().catch(()=>{});};addEventListener('pointerdown',go);}
+  setTimeout(()=>{try{ac.close()}catch(e){}},6000);}catch(e){}}
+function celebrate(goal,test){
+  if(CELEB_ON)return;CELEB_ON=true;celebStyle();
+  const digits=String(goal).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  const el=document.createElement('div');el.id='celeb';el.setAttribute('role','dialog');el.setAttribute('aria-label',digits+' subscribers celebration');
+  el.innerHTML=`<canvas></canvas><div class="cb"><div class="ey">AVGEEKS NATIONAL · ${((STOPS.find(s=>s[0]===goal)||[])[1]||"MILESTONE UNLOCKED").toUpperCase()}</div>
+   <div class="num">${[...digits].map(c=>`<span class="${c===','?'cm':''}">${c}</span>`).join('')}</div>
+   <div class="sub">SUBSCRIBERS 🛬</div>
+   <div class="msg">Ladies and gentlemen, we've landed at ${goal>=1000?(goal/1000)+'K':digits}. Thank you for flying with us, avgeeks ✈️💛</div>
+   <button class="btn" type="button">LET'S GOOO 🔥</button></div>
+   <div class="ban">THANK YOU · ${digits} SUBS</div><div class="jet">✈️</div>${test?'<div class="tag">TEST</div>':''}`;
+  document.body.appendChild(el);requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
+  cabinChime();
+  // split-flap digits flip in one by one
+  el.querySelectorAll('.num span').forEach((s,i)=>setTimeout(()=>s.classList.add(s.classList.contains('cm')?'go':'glow'),500+i*170));
+  // confetti + plane pulling a banner
+  const cv=el.querySelector('canvas'),g=cv.getContext('2d'),jet=el.querySelector('.jet'),ban=el.querySelector('.ban');
+  const DPR=Math.min(2,devicePixelRatio||1);let W=0,H=0;const fit=()=>{W=el.clientWidth;H=el.clientHeight;cv.width=W*DPR;cv.height=H*DPR;g.setTransform(DPR,0,0,DPR,0,0);};fit();addEventListener('resize',fit);
+  const COL=['#ffb627','#ffd36b','#e8edf2','#3ddc84','#5aa9ff','#ff6b6b'];const P=[];
+  const burst=(x,y,n,sp)=>{for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,v=sp*(.35+Math.random()*.9);P.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-sp*.5,r:3+Math.random()*5,c:COL[i%COL.length],a:Math.random()*6,va:(Math.random()-.5)*.3,life:1,sh:Math.random()<.35});}};
+  const rain=()=>{for(let i=0;i<4;i++)P.push({x:Math.random()*W,y:-10,vx:(Math.random()-.5)*1.2,vy:1.5+Math.random()*2,r:3+Math.random()*4,c:COL[(Math.random()*COL.length)|0],a:Math.random()*6,va:(Math.random()-.5)*.25,life:1,sh:Math.random()<.35});};
+  setTimeout(()=>burst(W*.5,H*.42,160,13),1300);setTimeout(()=>{burst(W*.2,H*.35,90,10);burst(W*.8,H*.35,90,10);},2000);
+  const t0=performance.now();let raf=0;
+  const tick=now=>{const t=(now-t0)/1000;g.clearRect(0,0,W,H);
+    if(t>1&&t<11)rain();
+    for(let i=P.length-1;i>=0;i--){const p=P[i];p.vy+=.18;p.vx*=.985;p.vy*=.985;p.x+=p.vx;p.y+=p.vy;p.a+=p.va;if(p.y>H+20){P.splice(i,1);continue;}
+      g.save();g.translate(p.x,p.y);g.rotate(p.a);g.fillStyle=p.c;if(p.sh){g.beginPath();g.arc(0,0,p.r*.6,0,7);g.fill();}else g.fillRect(-p.r/2,-p.r/4,p.r,p.r/2*(.4+Math.abs(Math.sin(p.a*2))));g.restore();}
+    // plane: two low passes across the screen, banner trailing behind
+    const pass=(t-.6)/4.2;if(pass>0&&pass<2){const k=pass%1,dir=pass<1?1:-1,x=dir>0?-160+k*(W+320):W+160-k*(W+320),y=(pass<1?H*.16:H*.84)+Math.sin(k*Math.PI*2)*H*.03;
+      const ang=Math.cos(k*Math.PI*2)*.06*dir;jet.style.transform=`translate(${x-30}px,${y-30}px) scaleX(${dir}) rotate(${ang}rad) rotate(45deg)`;
+      const bw=ban.offsetWidth;ban.style.transform=`translate(${dir>0?x-bw-50:x+50}px,${y-14+Math.sin(t*9)*2}px)`;jet.style.opacity=ban.style.opacity=1;
+      if(Math.random()<.5)P.push({x:x-dir*30,y:y+6,vx:-dir*.5,vy:-.4,r:3,c:'#ffffff',a:0,va:0,life:1,sh:true});}
+    else jet.style.opacity=ban.style.opacity=0;
+    raf=requestAnimationFrame(tick);};
+  raf=requestAnimationFrame(tick);
+  const close=()=>{if(!el.isConnected)return;el.classList.add('out');setTimeout(()=>{cancelAnimationFrame(raf);removeEventListener('resize',fit);el.remove();CELEB_ON=false;},700);};
+  el.addEventListener('click',close);addEventListener('keydown',function k(e){if(e.key==='Escape'){close();removeEventListener('keydown',k);}});
+  setTimeout(close,16000);
+}
+// call with the REAL live count; plays once per milestone per device, and live if you cross it while watching
+function checkMilestone(n){
+  const goals=STOPS.map(s=>s[0]).filter(g=>n>=g);if(!goals.length){CELEB_LAST=n;return;}
+  const g=goals[goals.length-1];let seen=0;try{seen=+localStorage.getItem('avn-celeb')||0;}catch(e){}
+  // only party for a goal that was just hit (crossed live, or hit very recently), never old ones
+  const fresh=(CELEB_LAST!=null&&CELEB_LAST<g)||n-g<=Math.max(15,g*.03);
+  if(g>seen){try{localStorage.setItem('avn-celeb',String(g));}catch(e){}if(fresh)setTimeout(()=>celebrate(g,false),800);}
+  CELEB_LAST=n;
+}
+if(CELEB_TEST)setTimeout(()=>celebrate(1000,true),3000);
 
 // airport finder
 const AP=JSON.parse($('apdata').textContent).map(a=>({iata:a[0],icao:a[1],name:a[2],city:a[3],country:a[4],lat:a[5],lon:a[6],elev:a[7],large:!!a[8],rw:a[9]}));
@@ -1629,7 +1719,7 @@ function buildGear(key,real,mzOff,at){
       [1,-1].forEach(s=>{const hg=new T3.Group();hg.position.set(s*R0*.12,by,mz);const o=new T3.Mesh(new T3.BoxGeometry(w,.05,len),M.doorOut),i=new T3.Mesh(new T3.BoxGeometry(w*.96,.02,len*.96),M.doorIn);o.position.x=s*w/2;i.position.set(s*w/2,.035,0);hg.add(o,i);grp.add(hg);doors.push({hg,s,type:'main'});});
       if(g.gear.centre){const cz=g.gear.centre[0]+mzOff,cl=wr*2.2*Math.max(1,g.gear.centre[1]/2),cw=wr*1.05,cy=belly(cz)+.02;[1,-1].forEach(s=>{const hg=new T3.Group();hg.position.set(s*cw,cy,cz);const o=new T3.Mesh(new T3.BoxGeometry(cw,.05,cl),M.doorOut),i=new T3.Mesh(new T3.BoxGeometry(cw*.96,.02,cl*.96),M.doorIn);o.position.x=-s*cw/2;i.position.set(-s*cw/2,.035,0);hg.add(o,i);grp.add(hg);doors.push({hg,s:-s,type:'main'});});}}
   }
-  return{grp,legs,doors,lights,fixed,tiltDir:({b789:-1,b788:-1,a388:-1,a359:-1})[key]||1,tiltDeg:({b789:12,b788:12,b77w:15,b772:14,a333:18,a332:18,a343:18,a346:18,a359:9,a388:8,b748:28,b744:28,b752:11,b753:11})[key]||12};
+  return{grp,legs,doors,lights,fixed,tiltDir:({b789:-1,b788:-1,b78x:-1,a388:-1,a359:-1,a35k:-1})[key]||1,tiltDeg:({b779:15,a345:18,b78x:12,a35k:9,b773:15,b77l:14,a339:18,b762:10,b763:10,b764:10,b789:12,b788:12,b77w:15,b772:14,a333:18,a332:18,a343:18,a346:18,a359:9,a388:8,b748:28,b744:28,b752:11,b753:11})[key]||12};
 }
 function animGear(G,A,c,dt){
   if(!G)return 0;const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2,cl=v=>Math.max(0,Math.min(1,v));
@@ -1668,7 +1758,7 @@ function screech(strength){if(!FLY.sound)return;try{const ac=ctx(),src=ac.create
   const th=ac.createOscillator(),tg=ac.createGain();th.frequency.value=55;tg.gain.setValueAtTime(.25*strength,t);tg.gain.exponentialRampToValueAtTime(.001,t+.35);th.connect(tg).connect(ac.destination);th.start();th.stop(t+.4);}catch(e){}}
 
 // ---------- real 3D aircraft (Flightradar24 3D models, built from FlightGear aircraft · GPLv2) ----------
-const GLASSMAT={b789:['ac3dmat1_004']},PAINTMAT={b738:/^ac3dmat1[34]_/};const MODELS={};let GLTFP=null;const HOUSE={};const WASH=new Map();
+const GLASSMAT={b789:['ac3dmat1_004']},PAINTMAT={b738:/^ac3dmat1[34]_/,b762:/^materi01/,b763:/^materi01/,b764:/^materi01/};const MODELS={};let GLTFP=null;const HOUSE={};const WASH=new Map();
 function loadGLTFLib(){if(T3&&T3.GLTFLoader)return Promise.resolve();return GLTFP||(GLTFP=new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';s.onload=ok;s.onerror=()=>{GLTFP=null;no();};document.head.appendChild(s);}));}
 function shrinkTex(root){const done=new Set();root.traverse(o=>{if(!o.material)return;(Array.isArray(o.material)?o.material:[o.material]).forEach(mt=>['map','emissiveMap','normalMap','roughnessMap','metalnessMap','aoMap'].forEach(k=>{const t=mt[k];if(!t||done.has(t)||!t.image)return;done.add(t);const im=t.image,w=im.width,h=im.height,M=1024;if(!(w>M||h>M))return;try{const sc=M/Math.max(w,h),c=document.createElement('canvas');c.width=Math.round(w*sc);c.height=Math.round(h*sc);c.getContext('2d').drawImage(im,0,0,c.width,c.height);t.image=c;t.needsUpdate=true;t.userData.keep=true;if(im.close)im.close();}catch(e){}}));});}
 function modelReady(key){const m=MODELS[key];return m&&m.ok?m:null;}
@@ -1676,7 +1766,7 @@ function loadModel(key){
   if(!T3||!PLANES[key])return Promise.resolve(null);
   if(MODELS[key])return MODELS[key].p;
   const m=MODELS[key]={ok:false};
-  m.p=loadGLTFLib().then(()=>new Promise((ok,no)=>new T3.GLTFLoader().load(''+key+'.json',ok,undefined,no)))
+  m.p=loadGLTFLib().then(()=>new Promise((ok,no)=>new T3.GLTFLoader().load(''+(PLANES[key].model||key)+'.json',ok,undefined,no)))
     .then(g=>{if(TOUCHY)shrinkTex(g.scene);Object.assign(m,prepModel(key,g.scene));m.ok=true;onModelReady(key);return m;})
     .catch(e=>{console.warn('3D model',key,e);delete MODELS[key];return null;});
   return m.p;
@@ -1695,11 +1785,15 @@ function prepModel(key,root){
   let box=bbox();const top=box.max.y-(box.max.y-box.min.y)*.12;let n=0,sx=0,sz=0,sxx=0,szz=0;
   each((x,y,z)=>{if(y>top){n++;sx+=x;sz+=z;sxx+=x*x;szz+=z*z;}});
   const mx=sx/n,mz=sz/n,vx=sxx/n-mx*mx,vz=szz/n-mz*mz,cx=(box.min.x+box.max.x)/2,cz=(box.min.z+box.max.z)/2,alongZ=vx<vz;
-  const th=alongZ?(mz>cz?0:Math.PI):(mx>cx?-Math.PI/2:Math.PI/2),sc=L/(alongZ?box.max.z-box.min.z:box.max.x-box.min.x);
-  const M=new T3.Matrix4().makeScale(sc,sc,sc).multiply(new T3.Matrix4().makeRotationY(th)).multiply(new T3.Matrix4().makeTranslation(-cx,0,-cz));
+  const th=alongZ?(mz>cz?0:Math.PI):(mx>cx?-Math.PI/2:Math.PI/2),sc=(p.modelLen||L)/(alongZ?box.max.z-box.min.z:box.max.x-box.min.x),zs=p.modelLen?L/p.modelLen:1;
+  const M=new T3.Matrix4().makeScale(sc,sc,sc*zs).multiply(new T3.Matrix4().makeRotationY(th)).multiply(new T3.Matrix4().makeTranslation(-cx,0,-cz));
   items.forEach(it=>it.g.applyMatrix4(M));box=bbox();
   // fuselage centreline + radius from a slice ahead of the wing
   let y0=1e9,y1=-1e9;each((x,y,z)=>{if(z>-L*.36&&z<-L*.26&&Math.abs(x)<L*.08){if(y<y0)y0=y;if(y>y1)y1=y;}});
+  // low-poly fuselages can have no vertices in that slice: measure with rays instead
+  if(!(y1>y0)||(y1-y0)/2<((GEO[key]&&GEO[key].R)||1)*.6){const rc0=new T3.Raycaster(),ms=items.filter(it=>!/shadow/.test(it.name)).map(it=>new T3.Mesh(it.g,new T3.MeshBasicMaterial({side:T3.DoubleSide}))),z=-L*.31;
+    rc0.set(new T3.Vector3(0,80,z),new T3.Vector3(0,-1,0));const hd=rc0.intersectObjects(ms,false);rc0.set(new T3.Vector3(0,-80,z),new T3.Vector3(0,1,0));const hu=rc0.intersectObjects(ms,false);
+    if(hd.length&&hu.length&&hd[0].point.y>hu[0].point.y){y1=hd[0].point.y;y0=hu[0].point.y;}}
   const yc=(y0+y1)/2,Rr=Math.max(.3,(y1-y0)/2),ownGear=!!p.fixedGear&&box.min.y-yc<-Rr*1.6;
   const dy=ownGear?-p.gearH-box.min.y:-yc;items.forEach(it=>it.g.translate(-(box.min.x+box.max.x)/2,dy,0));
   // main gear sits just behind the wing root
@@ -1713,9 +1807,9 @@ function prepModel(key,root){
   items.forEach(it=>{const nm=it.name;
     if(/strobe|beacon|flash|redlight|greenlight|lampe|navlight|landing.?light|propblur|propdisc|shadow/.test(nm))return;
     const src=it.src||{},mn=(src.name||'').toLowerCase(),col=src.color?src.color.clone():new T3.Color(1,1,1);
-    const glass=/glass|window|vitre|transp|canopy|windshield/.test(nm+' '+mn)||/wi(n)?($|_)/.test(mn)||(GLASSMAT[key]||[]).includes(mn)||(src.transparent&&src.opacity<.98);
+    const glass=/glass|window|vitre|transp|canopy|windshield/.test(nm+' '+mn)||/wi(n)?($|_)/.test(mn)||(GLASSMAT[(PLANES[key]&&PLANES[key].model)||key]||[]).includes(mn)||(src.transparent&&src.opacity<.98);
     const lum=col.r*.3+col.g*.59+col.b*.11;
-    it.paint=!glass&&(lum>.6||(PAINTMAT[key]&&PAINTMAT[key].test(mn)))&&!/rubber|tire|tyre|chrome|black|dark|metal|emit|light|roue|pneu|interior|cockpit/.test(nm+' '+mn);
+    it.paint=!glass&&(lum>.6||((PAINTMAT[(PLANES[key]&&PLANES[key].model)||key]||/$^/).test(mn)))&&!/rubber|tire|tyre|chrome|black|dark|metal|emit|light|roue|pneu|interior|cockpit/.test(nm+' '+mn);
     if(/helice|propeller|(^|\/)prop/.test(nm))it.kind='prop';else if(/fan|blade/.test(nm)&&!/casing|cowl|nacelle/.test(nm))it.kind='fan';
     if(it.kind){it.g.computeBoundingBox();it.c=it.g.boundingBox.getCenter(new T3.Vector3());it.g.translate(-it.c.x,-it.c.y,-it.c.z);}
     else{const seg=nm.split('/'),last=seg.length>1&&/^mesh\d*(_\d+)?$/.test(seg[seg.length-1])?seg[seg.length-2]:seg[seg.length-1];let sk=null;
@@ -1866,7 +1960,7 @@ function thumbRig(){if(THR)return THR;const cv=document.createElement('canvas');
   const sc=new T3.Scene();sc.add(new T3.HemisphereLight(0xffffff,0x5a5f68,.85));const k=new T3.DirectionalLight(0xffffff,.7);k.position.set(-20,40,30);sc.add(k);const k2=new T3.DirectionalLight(0xcfdcff,.3);k2.position.set(30,10,-20);sc.add(k2);
   const sh=new T3.Mesh(new T3.CircleGeometry(1,40),new T3.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.28,depthWrite:false}));sh.rotation.x=-Math.PI/2;sh.position.y=.02;sh.scale.set(1,.28,1);sc.add(sh);
   THR={r,sc,cv,cam:new T3.PerspectiveCamera(30,480/270,.5,800),sh};return THR;}
-const STH=new Set(["a318", "a319", "a320", "a321", "a332", "a333", "a343", "a346", "a359", "a388", "a388-avgeeks", "b736", "b737", "b738", "b739", "b744", "b748", "b752", "b753", "b772", "b77w", "b77w-avgeeks", "b788", "b789", "b789-namaste", "bcs1", "bcs3", "c172", "conc", "e170", "e190"]),TOUCHY=navigator.maxTouchPoints>1;function sthumb(key,lv){const n=key+(lv==='plain'?'':'-'+lv);return STH.has(n)?''+n+'.webp':'';}
+const STH=new Set(["a19n", "a20n", "a21n", "a318", "a319", "a320", "a321", "a332", "a333", "a339", "a343", "a345", "a346", "a359", "a35k", "a388", "a388-avgeeks", "a3st", "b38m", "b39m", "b3xm", "b736", "b737", "b738", "b739", "b744", "b748", "b752", "b753", "b762", "b763", "b764", "b772", "b773", "b779", "b77l", "b77w", "b77w-avgeeks", "b788", "b789", "b789-namaste", "b78x", "bcs1", "bcs3", "c172", "conc", "e170", "e190"]),TOUCHY=navigator.maxTouchPoints>1;function sthumb(key,lv){const n=key+(lv==='plain'?'':'-'+lv);return STH.has(n)?''+n+'.webp':'';}
 function thumbFor(key,lv){{const st=sthumb(key,lv);if(st)return st;}const id=key+'|'+lv+(lv==='custom'?JSON.stringify(FLY.custom||{}):'')+(modelReady(key)?'|r':'');if(THUMBS[id])return THUMBS[id];
   try{const T=thumbRig(),p=PLANES[key],o=buildPlaneModel(key,lv);o.position.y=p.gearH;T.sc.add(o);const big=Math.max(p.span,p.len);T.sh.scale.set(big*.42,big*.42*.3,1);T.sh.rotation.z=-.55;
     animPlaneModel(o,0,0);const d=big*1.32,yaw=-2.2;T.cam.position.set(Math.sin(yaw)*d,p.gearH+d*.15,Math.cos(yaw)*d);T.cam.lookAt(0,p.gearH*.8,0);T.r.render(T.sc,T.cam);T.sc.remove(o);
@@ -1881,10 +1975,10 @@ function cTex(c){const t=new T3.CanvasTexture(c);t.encoding=T3.sRGBEncoding;retu
 function toneR(r,e){r.outputEncoding=T3.sRGBEncoding;r.toneMapping=T3.ACESFilmicToneMapping;r.toneMappingExposure=e;}
 let CP=null; // {grp,panelTex,canvas,levers,stick,yoke,eye}
 const look={yaw:0,pitch:0,drag:null};
-const EYE={c172:[.5,-1.95],a318:[.78,-13.13],a319:[.78,-14.31],a320:[.78,-16.25],a321:[.78,-19.66],b736:[.62,-10.39],b737:[.58,-14.32],b738:[.6,-17.16],b739:[.62,-18.37],b752:[.45,-21.9],b753:[-.45,-25.47],e170:[.72,-12.27],e190:[.74,-15.38],bcs1:[.76,-15.08],bcs3:[.76,-16.9],b788:[.7,-25.43],b789:[.7,-28.48],b772:[.75,-29.36],b77w:[.75,-34.46],a332:[1.12,-26.74],a333:[1.25,-29.19],a343:[.91,-26.32],a346:[.91,-35.19],a359:[.74,-30.47],b744:[2.5,-29.64],b748:[2.5,-31.8],a388:[.5,-33.18],conc:[.6,-22.9]};// measured from each 3D model's cockpit windows (pilot eye: y up, z fwd-negative)
+const EYE={b779:[.75,-35.77],a345:[.91,-31.69],b762:[1.0,-21.9],b763:[.95,-24.8],b764:[1.1,-27.7],b773:[.75,-34.2],a3st:[-3.0,-24.6],a19n:[.78,-14.31],a20n:[.78,-16.25],a21n:[.78,-19.66],b38m:[.6,-17.16],b39m:[.62,-18.37],b3xm:[.62,-19.11],b77l:[.75,-29.36],b78x:[.7,-30.97],a35k:[.74,-33.66],a339:[1.25,-29.19],c172:[.5,-1.95],a318:[.78,-13.13],a319:[.78,-14.31],a320:[.78,-16.25],a321:[.78,-19.66],b736:[.62,-10.39],b737:[.58,-14.32],b738:[.6,-17.16],b739:[.62,-18.37],b752:[.45,-21.9],b753:[-.45,-25.47],e170:[.72,-12.27],e190:[.74,-15.38],bcs1:[.76,-15.08],bcs3:[.76,-16.9],b788:[.7,-25.43],b789:[.7,-28.48],b772:[.75,-29.36],b77w:[.75,-34.46],a332:[1.12,-26.74],a333:[1.25,-29.19],a343:[.91,-26.32],a346:[.91,-35.19],a359:[.74,-30.47],b744:[2.5,-29.64],b748:[2.5,-31.8],a388:[.5,-33.18],conc:[.6,-22.9]};// measured from each 3D model's cockpit windows (pilot eye: y up, z fwd-negative)
 function eyeOf(key){const p=PLANES[key],g=GEO[key],E=EYE[key];if(E)return new T3.Vector3(p.prop?-.25:-Math.min(.27*g.R,.62),E[0],E[1]);return new T3.Vector3(p.prop?-.25:-.27*g.R,(p.prop?.35:.5)*g.R*g.hf,-p.len/2+(g.cockpitT+(p.prop?.14:.035))*p.len);}
 // ---------- per-aircraft cockpit families (layout, controls, colours, special kit) ----------
-const CKFAM=k=>/^a3(18|19|20|21|32|33|43|46)$/.test(k)?'airbus':k==='a359'?'a350':k==='a388'?'a380':/^bcs/.test(k)?'a220':/^b73/.test(k)?'b737':/^b75/.test(k)?'b757':k==='b744'?'b744':/^(b77|b748)/.test(k)?'b777':/^b78/.test(k)?'b787':/^e1/.test(k)?'ejet':k==='conc'?'conc':'ga';
+const CKFAM=k=>/^a3(18|19|20|21|32|33|39|43|45|46|st)$|^a(19|20|21)n$/.test(k)?'airbus':/^a35/.test(k)?'a350':k==='a388'?'a380':/^bcs/.test(k)?'a220':/^b3.m$/.test(k)?'b787':/^b73/.test(k)?'b737':/^b7[56]/.test(k)?'b757':k==='b744'?'b744':/^(b77|b748)/.test(k)?'b777':/^b78/.test(k)?'b787':/^e1/.test(k)?'ejet':k==='conc'?'conc':'ga';
 const CKS={
   airbus:{name:'Airbus FBW',ctrl:'stick',bg:'#5c6773',frame:'#5f6a76',trim:'#4a545f',bez:'#353c44',slots:['pfd','nd',['ewd','sd'],'nd','pfd'],fma:'airbus',movingThr:false},
   a350:{name:'A350',ctrl:'stick',bg:'#4f5964',frame:'#56606b',trim:'#424b55',bez:'#24292f',slots:['ois','pfd','nd',['ewd','sd'],'nd','pfd','ois'],fma:'airbus',movingThr:false,kccu:true},
@@ -2224,9 +2318,12 @@ GEO.b788=scaleGeo(GEO.b789,56.7/62.8,1,2.88);GEO.b772=scaleGeo(GEO.b77w,63.7/73.
 GEO.b744=scaleGeo(GEO.b748,70.7/76.3,64.4/68.4,3.25);
 GEO.conc=scaleGeo(GEO.a320,61.66/37.6,25.6/35.8,1.45,{wing:{root:27,tip:2.4,semi:12.8,sweep:58,dih:0,th:.04,y:-1.1,z:6},nac:{d:1.3,len:11,drop:1.5,fwd:-2},eng:[2.4,4.4],wl:null,cockpitT:.05,doors:[.12,.45,.82]});GEO.conc.gear.mains=[[3.8,1.6,4]];GEO.conc.gear.nose=[-19];
 GEO.e170=scaleGeo(GEO.a320,29.9/37.6,26/35.8,1.5,{nac:{d:1.6,len:3.4,drop:1.0,fwd:2.0},wl:{type:'blended',h:1.4}});GEO.e170.gear.wheel=.48;GEO.e190=scaleGeo(GEO.e170,36.2/29.9,28.7/26,1.5);GEO.bcs1=scaleGeo(GEO.bcs3,35/38.7,1,1.85);GEO.b753=scaleGeo(GEO.b752,54.4/47.3,1,1.94);GEO.a343=scaleGeo(GEO.a346,63.7/75.4,60.3/63.45,2.82);
+GEO.b762=scaleGeo(GEO.b789,48.5/62.8,47.6/60.1,2.52);GEO.b762.gear.mains=[[4.65,1.8,4]];GEO.b763=scaleGeo(GEO.b762,54.9/48.5,1,2.52);GEO.b764=scaleGeo(GEO.b762,61.4/48.5,51.9/47.6,2.52);
+GEO.b773=scaleGeo(GEO.b77w,1,60.9/64.8,3.1);GEO.b779=scaleGeo(GEO.b77w,76.7/73.9,71.8/64.8,3.1);GEO.a345=scaleGeo(GEO.a346,67.9/75.4,1,2.82);GEO.b77l=scaleGeo(GEO.b77w,63.7/73.9,1,3.1);GEO.b78x=scaleGeo(GEO.b789,68.3/62.8,1,2.88);GEO.a35k=scaleGeo(GEO.a359,73.8/66.8,1,2.98);GEO.a35k.gear.mains=[[5.3,2.3,6]];GEO.a339=scaleGeo(GEO.a333,1,64/60.3,2.82);
+GEO.a19n=scaleGeo(GEO.a319,1,1,1.98);GEO.a20n=scaleGeo(GEO.a320,1,1,1.98);GEO.a21n=scaleGeo(GEO.a321,1,1,1.98);GEO.b38m=scaleGeo(GEO.b738,1,35.9/35.8,1.88);GEO.b39m=scaleGeo(GEO.b739,42.2/42.1,35.9/35.8,1.88);GEO.b3xm=scaleGeo(GEO.b739,43.8/42.1,35.9/35.8,1.88);GEO.a3st=scaleGeo(GEO.a333,56.2/63.7,44.8/60.3,3.4);GEO.a3st.gear.mains=[[4.8,2.0,4]];
 // real main-gear tracks (half-track, m) + A340 centre gear: -300 twin-wheel, -600 four-wheel bogie
-{const T={a318:3.8,a319:3.8,a321:3.8,b736:2.86,b737:2.86,b739:2.86,b738:2.86,e170:2.6,e190:2.97,bcs1:3.46,bcs3:3.46,a359:5.3,b772:5.48,b77w:5.48,a346:5.35,a343:5.35,a332:5.34,a333:5.34};Object.keys(T).forEach(k=>{if(GEO[k])GEO[k].gear.mains[0][0]=T[k];});GEO.b744.gear.mains[0][0]=5.5;GEO.b748.gear.mains[0][0]=5.6;
- GEO.a343.gear.centre=[GEO.a343.gear.mains[0][1]+1.0,2];GEO.a346.gear.centre=[GEO.a346.gear.mains[0][1]+1.3,4];}
+{const T={b779:5.48,a345:5.35,a19n:3.8,a20n:3.8,a21n:3.8,b38m:2.86,b39m:2.86,b3xm:2.86,b773:5.48,b77l:5.48,a339:5.34,b78x:4.9,a318:3.8,a319:3.8,a321:3.8,b736:2.86,b737:2.86,b739:2.86,b738:2.86,e170:2.6,e190:2.97,bcs1:3.46,bcs3:3.46,a359:5.3,b772:5.48,b77w:5.48,a346:5.35,a343:5.35,a332:5.34,a333:5.34};Object.keys(T).forEach(k=>{if(GEO[k])GEO[k].gear.mains[0][0]=T[k];});GEO.b744.gear.mains[0][0]=5.5;GEO.b748.gear.mains[0][0]=5.6;
+ GEO.a343.gear.centre=[GEO.a343.gear.mains[0][1]+1.0,2];GEO.a346.gear.centre=[GEO.a346.gear.mains[0][1]+1.3,4];GEO.a345.gear.centre=[GEO.a345.gear.mains[0][1]+1.3,4];}
 const KT=0.514444,FT=0.3048,G=9.81,D2R=Math.PI/180;
 const PLANES={
   c172:{flexK:0,name:'Piper PA-28',tag:'Trainer',fixedGear:true,vs0:40,vs1:48,vr:55,vapp:65,vmax:130,twr:.30,roll:65,pitch:16,len:7.3,span:10.7,eng:0,prop:true,col:0xc8102e,gearH:1.0,eyeZ:-.15,eyeY:.55,tail:14,flapsTO:1},
@@ -2252,20 +2349,37 @@ const PLANES={
   b753:{flexK:0.013,name:'Boeing 757-300',tag:'Narrowbody',vs0:108,vs1:138,vr:145,vapp:140,vmax:480,twr:.33,roll:25,pitch:5,len:54.4,span:38,eng:2,col:0x0b2a5b,gearH:3.9,tail:9.5,flapsTO:1},
   e190:{flexK:0.007,name:'Embraer E190',tag:'Regional',vs0:104,vs1:130,vr:135,vapp:132,vmax:455,twr:.31,roll:30,pitch:5.8,len:36.2,span:28.7,eng:2,col:0x1d4ed8,gearH:2.9,tail:11,flapsTO:1},
   bcs1:{flexK:0.009,name:'Airbus A220-100',tag:'Narrowbody',vs0:98,vs1:126,vr:128,vapp:125,vmax:470,twr:.34,roll:31,pitch:6,len:35,span:35.1,eng:2,col:0x1d4ed8,gearH:3.1,tail:12,flapsTO:1},
+  b762:{flexK:.016,name:'Boeing 767-200ER',tag:'Widebody',vs0:108,vs1:138,vr:145,vapp:138,vmax:480,twr:.30,roll:24,pitch:5,len:48.5,span:47.6,eng:2,col:0x0b2a5b,gearH:4.6,tail:10.5,flapsTO:1},
+  b763:{flexK:.017,name:'Boeing 767-300ER',tag:'Widebody',vs0:110,vs1:140,vr:150,vapp:142,vmax:480,twr:.29,roll:23,pitch:4.8,len:54.9,span:47.6,eng:2,col:0x0b2a5b,gearH:4.6,tail:10,flapsTO:1},
+  b764:{flexK:.018,name:'Boeing 767-400ER',tag:'Widebody',vs0:112,vs1:143,vr:155,vapp:146,vmax:480,twr:.28,roll:23,pitch:4.6,len:61.4,span:51.9,eng:2,col:0x0b2a5b,gearH:4.7,tail:9.5,flapsTO:1},
+  b773:{flexK:0.02,name:'Boeing 777-300',tag:'Widebody',vs0:118,vs1:150,vr:165,vapp:150,vmax:490,twr:.27,roll:20,pitch:4,len:73.9,span:60.9,eng:2,col:0x5b1b3c,gearH:5.6,tail:9.5,flapsTO:1},
+  b779:{flexK:0.02,name:'Boeing 777-9',tag:'Widebody',vs0:118,vs1:150,vr:165,vapp:149,vmax:490,twr:.28,roll:20,pitch:3.8,len:76.7,span:71.8,eng:2,col:0x5b1b3c,gearH:5.6,tail:9,flapsTO:1,model:'b77w',modelLen:73.9},
+  a345:{flexK:0.026,name:'Airbus A340-500',tag:'Widebody',vs0:112,vs1:145,vr:158,vapp:145,vmax:480,twr:.24,roll:21,pitch:4.3,len:67.9,span:63.45,eng:4,col:0x1d4ed8,gearH:5.3,tail:10,flapsTO:1,model:'a346',modelLen:75.4},
+  b77l:{flexK:0.02,name:'Boeing 777-200LR',tag:'Widebody',vs0:112,vs1:145,vr:158,vapp:143,vmax:490,twr:.30,roll:21,pitch:4.2,len:63.7,span:64.8,eng:2,col:0x5b1b3c,gearH:5.5,tail:10.5,flapsTO:1,model:'b772'},
+  b78x:{flexK:0.035,name:'Boeing 787-10',tag:'Widebody',vs0:116,vs1:149,vr:160,vapp:152,vmax:490,twr:.27,roll:21,pitch:4.2,len:68.3,span:60.1,eng:2,col:0x1f6fd6,gearH:5.1,tail:9.5,flapsTO:1,model:'b789',modelLen:62.8},
+  a35k:{flexK:0.028,name:'Airbus A350-1000',tag:'Widebody',vs0:116,vs1:149,vr:155,vapp:145,vmax:488,twr:.28,roll:21,pitch:4.3,len:73.8,span:64.75,eng:2,col:0x1d4ed8,gearH:5.4,tail:10,flapsTO:1,model:'a359',modelLen:66.8},
+  a339:{flexK:.024,name:'Airbus A330-900neo',tag:'Widebody',vs0:108,vs1:140,vr:150,vapp:137,vmax:470,twr:.28,roll:22,pitch:4.5,len:63.7,span:64,eng:2,col:0x1d4ed8,gearH:5.1,tail:10,flapsTO:1,model:'a333'},
+  a19n:{flexK:0.007,name:'Airbus A319neo',tag:'Narrowbody',vs0:102,vs1:131,vr:135,vapp:132,vmax:470,twr:.33,roll:29,pitch:5.8,len:33.8,span:35.8,eng:2,col:0x1d4ed8,gearH:3.65,tail:12,flapsTO:1,model:'a319'},
+  a20n:{flexK:0.008,name:'Airbus A320neo',tag:'Narrowbody',vs0:105,vs1:135,vr:140,vapp:136,vmax:470,twr:.31,roll:28,pitch:5.5,len:37.6,span:35.8,eng:2,col:0x1d4ed8,gearH:3.65,tail:11.5,flapsTO:1,model:'a320'},
+  a21n:{flexK:0.009,name:'Airbus A321neo',tag:'Narrowbody',vs0:110,vs1:140,vr:150,vapp:139,vmax:470,twr:.30,roll:27,pitch:5.2,len:44.5,span:35.8,eng:2,col:0x1d4ed8,gearH:3.7,tail:10,flapsTO:1,model:'a321'},
+  b38m:{flexK:0.008,name:'Boeing 737 MAX 8',tag:'Narrowbody',vs0:108,vs1:140,vr:145,vapp:143,vmax:475,twr:.32,roll:28,pitch:5.5,len:39.5,span:35.9,eng:2,col:0x0b2a5b,gearH:3.15,tail:11,flapsTO:1,model:'b738'},
+  b39m:{flexK:0.009,name:'Boeing 737 MAX 9',tag:'Narrowbody',vs0:110,vs1:142,vr:150,vapp:145,vmax:475,twr:.30,roll:27,pitch:5.2,len:42.2,span:35.9,eng:2,col:0x0b2a5b,gearH:3.15,tail:9.5,flapsTO:1,model:'b739'},
+  b3xm:{flexK:0.009,name:'Boeing 737 MAX 10',tag:'Narrowbody',vs0:112,vs1:144,vr:153,vapp:147,vmax:475,twr:.29,roll:27,pitch:5,len:43.8,span:35.9,eng:2,col:0x0b2a5b,gearH:3.3,tail:9.5,flapsTO:1,model:'b739',modelLen:42.1},
+  a3st:{flexK:.014,name:'Airbus Beluga',tag:'Freighter',vs0:105,vs1:135,vr:140,vapp:135,vmax:430,twr:.28,roll:22,pitch:4.5,len:56.2,span:44.8,eng:2,col:0x1d4ed8,gearH:7.3,tail:10,flapsTO:1},
   conc:{noFlaps:true,flexK:0.004,name:'Concorde',tag:'Supersonic',vs0:130,vs1:168,vr:195,vapp:165,vmax:1250,twr:.37,roll:24,pitch:4.5,len:61.66,span:25.6,eng:4,col:0x1d4ed8,gearH:4.2,tail:13.5,flapsTO:1},
   a346:{flexK:0.026,name:'Airbus A340-600',tag:'Widebody',vs0:115,vs1:148,vr:160,vapp:148,vmax:480,twr:.23,roll:20,pitch:4,len:75.4,span:63.45,eng:4,col:0x1d4ed8,gearH:5.3,tail:9,flapsTO:1},
   a359:{flexK:0.028,name:'Airbus A350-900',tag:'Widebody',vs0:112,vs1:145,vr:150,vapp:140,vmax:488,twr:.28,roll:22,pitch:4.5,len:66.8,span:64.75,eng:2,col:0x1d4ed8,gearH:5.3,tail:10.5,flapsTO:1},
   b748:{flexK:0.02,name:'Boeing 747-8',tag:'Queen',vs0:120,vs1:152,vr:165,vapp:155,vmax:495,twr:.25,roll:19,pitch:3.8,len:76.3,span:68.4,eng:4,col:0x0b2a5b,gearH:5.9,eyeZ:-.46,eyeY:1.4,tail:9.5,flapsTO:1},
   a388:{flexK:0.014,name:'Airbus A380',tag:'Superjumbo',vs0:115,vs1:150,vr:160,vapp:145,vmax:490,twr:.24,roll:18,pitch:3.8,len:72.7,span:79.8,eng:4,col:0xd71a28,gearH:6.4,eyeZ:-.45,eyeY:1.45,tail:11,flapsTO:1}
 };
-const FUEL={c172:[145,27,115],e170:[9300,1600,430],e190:[12900,1900,445],bcs1:[17100,1700,450],bcs3:[17100,1800,450],a318:[19000,2100,447],a319:[19000,2300,450],a320:[19000,2500,450],a321:[19000,2900,450],
+const FUEL={b779:[197000,7000,490],a345:[214800,8000,475],b762:[63000,4800,460],b763:[73000,5200,460],b764:[73000,5500,460],b773:[137000,7800,490],b77l:[145500,7000,490],b78x:[101000,6000,488],a35k:[124000,6800,488],a339:[111000,5300,470],a19n:[19000,2000,450],a20n:[19000,2100,450],a21n:[26000,2400,450],b38m:[20700,2150,453],b39m:[20700,2300,453],b3xm:[20700,2400,453],a3st:[19100,4300,420],c172:[145,27,115],e170:[9300,1600,430],e190:[12900,1900,445],bcs1:[17100,1700,450],bcs3:[17100,1800,450],a318:[19000,2100,447],a319:[19000,2300,450],a320:[19000,2500,450],a321:[19000,2900,450],
   b736:[20800,2200,450],b737:[20800,2300,450],b738:[20800,2500,453],b739:[20800,2700,453],b752:[34000,3100,460],b753:[34000,3500,460],b788:[101000,5000,488],b789:[101000,5600,488],b772:[137000,6800,490],b77w:[145500,7500,490],
   a332:[111000,5600,470],a333:[78000,5800,470],a343:[113000,6500,475],a346:[155000,8500,475],a359:[110500,5800,488],b744:[174000,11000,490],b748:[191000,10500,490],a388:[254000,12000,490],conc:[95680,20500,1150]};
 const FCAP=Object.fromEntries(Object.entries(FUEL).map(([k,v])=>[k,v[0]/1000]));
 function cruiseKt(k){return(FUEL[k]||[0,0,420])[2];}
 function tripFuel(k,km){const f=FUEL[k]||[20000,2500,450],h=km/(f[2]*1.852)+.35;return{h,need:f[1]*(h*1.03+.75),cap:f[0]};}
 const RANKS=['Cadet','Student Pilot','Private Pilot','Second Officer','First Officer','Senior F/O','Captain','Senior Captain','Chief Pilot','Legend'];
-const UNLOCK={conc:9,a318:1,a319:1,b736:1,b737:1,e190:1,bcs1:1,b753:3,b788:3,a332:3,b772:5,a343:5,b744:7,c172:0,e170:1,bcs3:1,a320:1,b738:1,a321:2,b739:2,b752:3,a333:3,b789:3,a359:5,a346:6,b77w:5,b748:7,a388:7};
+const UNLOCK={b779:7,a345:6,b762:3,b763:3,b764:4,b773:5,b77l:6,b78x:4,a35k:6,a339:4,a19n:1,a20n:1,a21n:2,b38m:1,b39m:2,b3xm:2,a3st:6,conc:9,a318:1,a319:1,b736:1,b737:1,e190:1,bcs1:1,b753:3,b788:3,a332:3,b772:5,a343:5,b744:7,c172:0,e170:1,bcs3:1,a320:1,b738:1,a321:2,b739:2,b752:3,a333:3,b789:3,a359:5,a346:6,b77w:5,b748:7,a388:7};
 const lvlOf=xp=>Math.min(9,Math.floor(Math.sqrt(xp/120)));
 function planeLocked(k){return!!FLY.career&&lvlOf(store.get('avn-career',{xp:0}).xp)<(UNLOCK[k]||0);}
 const FLY={mode:'takeoff',ap:null,end:null,plane:'a320',livery:'avgeeks',invert:false,sound:true};
@@ -2294,7 +2408,7 @@ function fsSetAirport(a){
 }
 $('fsRwy').addEventListener('change',e=>{FLY.end=e.target.value;fsSaveSettings();});
 const FAMS=[{n:'Piper PA-28',v:['c172']},{n:'A220',v:['bcs1','bcs3']},{n:'A320 family',v:['a318','a319','a320','a321']},{n:'737 NG',v:['b736','b737','b738','b739']},{n:'E-Jets',v:['e170','e190']},{n:'757',v:['b752','b753']},
-  {n:'787 Dreamliner',v:['b788','b789']},{n:'777',v:['b772','b77w']},{n:'A330',v:['a332','a333']},{n:'A340',v:['a343','a346']},{n:'A350',v:['a359']},{n:'747',v:['b744','b748']},{n:'A380',v:['a388']},{n:'Concorde',v:['conc']}];
+  {n:'737 MAX',v:['b38m','b39m','b3xm']},{n:'A320neo family',v:['a19n','a20n','a21n']},{n:'767',v:['b762','b763','b764']},{n:'787 Dreamliner',v:['b788','b789','b78x']},{n:'777',v:['b772','b77l','b773','b77w','b779']},{n:'A330',v:['a332','a333','a339']},{n:'A340',v:['a343','a345','a346']},{n:'A350',v:['a359','a35k']},{n:'Beluga',v:['a3st']},{n:'747',v:['b744','b748']},{n:'A380',v:['a388']},{n:'Concorde',v:['conc']}];
 const famOf=k=>FAMS.find(f=>f.v.includes(k))||FAMS[0];const shortN=p=>p.name.replace('Airbus ','').replace('Boeing ','').replace('Embraer ','');
 function fsPlaneCards(){$('fsPlanes').innerHTML=FAMS.map((f,i)=>{const sel=f.v.includes(FLY.plane)?FLY.plane:f.v[f.v.length>2?2:f.v.length-1],p=PLANES[sel];
   return `<button class="pcard fam" data-fam="${i}" data-first="${f.v[0]}"><img alt="" data-thumb="${sel}"><b>${esc(f.v.length>1?f.n:shortN(p))}</b><small>${f.v.length>1?(f.v.includes(FLY.plane)?shortN(PLANES[FLY.plane])+' · ':'')+f.v.length+' variants ›':p.tag+' · Vr '+p.vr+' kt'}</small></button>`;}).join('')+'<div class="varsheet" id="fsVar" hidden></div>';$('fsPlanes').classList.remove('varopen');if(T3)setTimeout(thumbsPaint,0);}
@@ -2574,7 +2688,7 @@ function apTargets(){const st=S,p=pl(),cruise=cruiseKt(FLY.plane);
   if(false){APL.phase='G/S';toast('Glideslope captured · gear down, flaps full');st.gear=true;st.flaps=3;}
   const hdg=Math.max(-.6,Math.min(.6,-Math.atan2(st.x,1500)));
   if(APL.phase==='G/S'){if(st.y>gsAlt+250){APL.phase='LOC';}else return{hdg,alt:gsAlt,vs:-st.V*Math.sin(3*D2R)+Math.max(-3,Math.min(3,(gsAlt-st.y)*.12)),spd:p.vapp*KT,lat:'LOC'};}
-  if(st.flaps<2&&st.y/FT<4000)st.flaps=2;return{hdg,alt:Math.max(1500*FT,Math.min(2300*FT,gsAlt-30)),spd:Math.min(p.vapp+20,cruise)*KT,lat:'LOC'};}
+  if(st.flaps<2&&st.y/FT<4000&&st.flapJam==null)st.flaps=2;return{hdg,alt:Math.max(1500*FT,Math.min(2300*FT,gsAlt-30)),spd:Math.min(p.vapp+20,cruise)*KT,lat:'LOC'};}
 function apSpd(alt,cruise,p){// managed speed: 250 kt below 10,000 ft, ~290 kt indicated above (as true airspeed), capped at cruise
   const ft=Math.max(0,alt/FT+rw.elev);if(p.prop)return cruise;const ias=ft<10000?250:(p.vmax>700?380:290);return Math.min(cruise,ias*(1+.02*ft/1000));}
 function apStep(h){const st=S,p=pl();if(!APL.on||st.ground||st.done)return;h=h||1/120;
@@ -2590,7 +2704,7 @@ function apStep(h){const st=S,p=pl();if(!APL.on||st.ground||st.done)return;h=h||
   const thR=(st.th-(APL.thp!=null?APL.thp:st.th))/h;APL.thp=st.th;const pc=Math.max(-1,Math.min(1,((thT-st.th)*2.2-thR*.35)/(p.pitch*D2R)));inp.pitch=(FLY.invert?-1:1)*pc;
   const wv=windVec(),wn=wv[0]*Math.cos(t.hdg)+wv[1]*Math.sin(t.hdg),he=wrapA(t.hdg-Math.asin(Math.max(-.5,Math.min(.5,wn/V)))-st.psi),bmax=(st.arr?25:Math.abs(he)>.3?25:20)*D2R,phT=Math.max(-bmax,Math.min(bmax,he*2.6));inp.roll=Math.max(-1,Math.min(1,(phT-st.ph)/(p.roll*D2R)*2.5));inp.yaw=0;
   const D=dragAcc(p,st,G*Math.cos(st.gam)),base=(D+G*Math.sin(st.gam))/(p.twr*G);const se=t.spd-st.V;APL.si=Math.max(-.25,Math.min(.25,(APL.si||0)+se*h*.008));inp.thr=Math.max(0,Math.min(1,base+se*.05+APL.si));if(vsT<-4&&se<5*KT)inp.thr=Math.min(inp.thr,Math.max(0,base+se*.05));
-  if(st.flaps>1&&!st.arr&&st.V>(p.vs1+40)*KT)st.flaps=Math.max(0,st.flaps-1);
+  if(st.flaps>1&&!st.arr&&st.flapJam==null&&st.V>(p.vs1+40)*KT)st.flaps=Math.max(0,st.flaps-1);
   if(!st.arr&&st.gear&&!p.fixedGear&&st.y/FT>400)st.gear=false;
   APL.lat=t.lat;}
 function apOffThr(){try{const st=S,p=pl();if(!st||st.ground)return;const D=dragAcc(p,st,G),lvl=Math.max(0,Math.min(1,D/(p.twr*G)));inp.thr=Math.max(inp.thr,Math.min(.95,lvl*1.05));st.thr=Math.max(st.thr||0,inp.thr*.9);}catch(e){}}
@@ -2722,7 +2836,7 @@ const MYCS=['m:LN','m:D8','m:D4','m:D4','m:LA','f:LV'];
 function rwyKey(id){const m=/^(\d{1,2})([LRC]?)$/.exec(id||'');return m?'R'+String(+m[1]).padStart(2,'0')+m[2]:null;}
 function atcClear(kind){const r=rwyKey(rw.id);if(!r)return;const k=kind==='taxi'?[...MYCS,'taxi',r,'via']:[...MYCS,r,kind];setTimeout(()=>flyRadio(k),900);}
 // ---- GPWS + warning system: synthesized voice + real-style alert tones
-const V3={"c:Aarctica":[0.35,0.7493],"c:Aavgeeks":[1.4493,0.644],"c:Abackcountry":[2.4432,0.8171],"c:Abelta":[3.6103,0.6383],"c:Abritish":[4.5986,0.6585],"c:Acryanair":[5.6072,0.6619],"c:Adunes":[6.619,0.5938],"c:Afreedom":[7.5629,0.6284],"c:Ajetbloo":[8.5413,0.7489],"c:Alioncity":[9.6402,0.8268],"c:Aloofthansa":[10.817,0.8266],"c:Anamaste":[11.9936,0.6143],"c:Anortheast":[12.9579,0.7279],"c:Aroo":[14.0358,0.452],"c:Aspiritless":[14.8378,0.7518],"c:Auntied":[15.9396,0.6653],"c:D0":[16.9549,0.5545],"c:D1":[17.8593,0.4524],"c:D2":[18.6617,0.451],"c:D3":[19.4627,0.4928],"c:D4":[20.3055,0.4808],"c:D5":[21.1363,0.4605],"c:D6":[21.9468,0.4893],"c:D7":[22.786,0.5674],"c:D8":[23.7035,0.4235],"c:D9":[24.4769,0.5509],"c:R01":[25.3778,0.7654],"c:R01C":[26.4932,1.1787],"c:R01L":[28.022,1.1119],"c:R01R":[29.4838,1.0767],"c:R02":[30.9105,0.8681],"c:R02C":[32.1286,1.1819],"c:R02L":[33.6605,1.0674],"c:R02R":[35.0779,0.9985],"c:R03":[36.4265,0.934],"c:R03L":[37.7105,1.0966],"c:R03R":[39.1571,1.1405],"c:R04":[40.6477,0.9059],"c:R04C":[41.9035,1.2145],"c:R04L":[43.4681,1.1223],"c:R04R":[44.9404,1.0822],"c:R05":[46.3725,0.9325],"c:R05C":[47.655,1.2104],"c:R05L":[49.2154,1.1873],"c:R05R":[50.7527,1.19],"c:R06":[52.2927,0.8988],"c:R06C":[53.5416,1.1917],"c:R06L":[55.0832,1.1562],"c:R06R":[56.5895,1.0501],"c:R07":[57.9895,0.9317],"c:R07C":[59.2712,1.2863],"c:R07L":[60.9075,1.198],"c:R07R":[62.4555,1.132],"c:R08":[63.9375,0.8142],"c:R08L":[65.1017,1.1043],"c:R08R":[66.556,1.0992],"c:R09":[68.0052,0.8826],"c:R09C":[69.2378,1.2517],"c:R09L":[70.8395,1.2065],"c:R09R":[72.396,1.215],"c:R10":[73.961,1.1527],"c:R10C":[75.4638,1.5654],"c:R10L":[77.3792,1.4848],"c:R10R":[79.2139,1.4528],"c:R11":[81.0167,0.973],"c:R11L":[82.3397,1.2825],"c:R11R":[83.9722,1.2448],"c:R12":[85.567,0.9841],"c:R12L":[86.9012,1.2525],"c:R12R":[88.5036,1.2383],"c:R13":[90.0919,1.056],"c:R13C":[91.4979,1.3775],"c:R13L":[93.2254,1.301],"c:R13R":[94.8763,1.2473],"c:R14":[96.4736,1.0356],"c:R14L":[97.8593,1.3328],"c:R14R":[99.542,1.2737],"c:R15":[101.1658,1.121],"c:R15L":[102.6368,1.3765],"c:R15R":[104.3633,1.3655],"c:R16":[106.0788,1.0927],"c:R16C":[107.5215,1.3576],"c:R16L":[109.2291,1.3447],"c:R16R":[110.9237,1.2571],"c:R17":[112.5308,1.1013],"c:R17C":[113.9821,1.5445],"c:R17L":[115.8766,1.4607],"c:R17R":[117.6873,1.2924],"c:R18":[119.3297,1.0312],"c:R18C":[120.711,1.28],"c:R18L":[122.341,1.2375],"c:R18R":[123.9285,1.196],"c:R19":[125.4745,1.1258],"c:R19C":[126.9502,1.5132],"c:R19L":[128.8135,1.4199],"c:R19R":[130.5834,1.4732],"c:R20":[132.4065,1.1519],"c:R20C":[133.9085,1.5468],"c:R20L":[135.8053,1.4654],"c:R20R":[137.6207,1.3757],"c:R21":[139.3464,1.0473],"c:R21L":[140.7437,1.3473],"c:R21R":[142.441,1.1812],"c:R22":[143.9723,1.0417],"c:R22C":[145.364,1.3802],"c:R22L":[147.0942,1.305],"c:R22R":[148.7492,1.2564],"c:R23":[150.3556,1.0883],"c:R23C":[151.7939,1.4075],"c:R23L":[153.5513,1.3515],"c:R23R":[155.2529,1.2827],"c:R24":[156.8855,1.0546],"c:R24C":[158.2901,1.4094],"c:R24L":[160.0495,1.3273],"c:R24R":[161.7268,1.2343],"c:R25":[163.3111,1.1477],"c:R25C":[164.8088,1.4835],"c:R25L":[166.6422,1.3979],"c:R25R":[168.3902,1.3324],"c:R26":[170.0726,1.1257],"c:R26L":[171.5483,1.3781],"c:R26R":[173.2764,1.2914],"c:R27":[174.9178,1.1669],"c:R27C":[176.4347,1.5294],"c:R27L":[178.314,1.4703],"c:R27R":[180.1343,1.3817],"c:R28":[181.866,1.0039],"c:R28C":[183.2199,1.311],"c:R28L":[184.8809,1.3024],"c:R28R":[186.5333,1.2902],"c:R29":[188.1735,1.0848],"c:R29L":[189.6083,1.3719],"c:R29R":[191.3302,1.432],"c:R30":[193.1122,1.2103],"c:R30L":[194.6725,1.5357],"c:R30R":[196.5582,1.4425],"c:R31":[198.3508,1.1009],"c:R31C":[199.8016,1.4512],"c:R31L":[201.6028,1.419],"c:R31R":[203.3717,1.382],"c:R32":[205.1038,1.0698],"c:R32L":[206.5236,1.3301],"c:R32R":[208.2037,1.3065],"c:R33":[209.8602,1.1371],"c:R33L":[211.3473,1.4015],"c:R33R":[213.0988,1.3325],"c:R34":[214.7813,1.1154],"c:R34C":[216.2467,1.41],"c:R34L":[218.0068,1.3509],"c:R34R":[219.7077,1.2828],"c:R35":[221.3405,1.1876],"c:R35C":[222.8781,1.4826],"c:R35L":[224.7107,1.4261],"c:R35R":[226.4868,1.4134],"c:R36":[228.2501,1.1683],"c:R36C":[229.7684,1.3882],"c:R36L":[231.5067,1.4229],"c:R36R":[233.2795,1.3135],"c:at":[234.943,0.3006],"c:contact_dep":[235.5937,3.4273],"c:ctl":[239.371,0.9275],"c:ctl_emerg":[240.6485,4.3159],"c:cto":[245.3144,1.1424],"c:desc3":[246.8068,1.9765],"c:ditch_ack":[249.1333,4.5592],"c:fl":[254.0425,0.7676],"c:gnd_push":[255.16,3.2287],"c:ils":[258.7387,1.4753],"c:lineup":[260.564,1.6455],"c:mayday_ack":[262.5595,9.0185],"c:radar":[271.9281,2.2202],"c:rescue":[274.4982,4.7851],"c:taxi_to":[279.6333,0.7667],"c:thousand":[280.75,0.6636],"c:vacate":[281.7636,3.6179],"c:via":[285.7315,1.5031],"c:wind":[287.5846,0.5328],"g:Approaching minimums":[288.4674,1.533],"g:Bank angle, bank angle":[290.3504,1.9641],"g:Engine 1 fire":[292.6645,1.8377],"g:Engine 2 fire":[294.8523,1.6873],"g:Engine 3 fire":[296.8895,1.8172],"g:Engine 4 fire":[299.0568,1.7803],"g:Engine failure":[301.1871,1.4173],"g:Glideslope":[302.9544,0.966],"g:Hundred above":[304.2704,1.0987],"g:Minimum":[305.7191,0.7347],"g:Minimums":[306.8038,0.7883],"g:One thousand":[307.9421,1.1046],"g:Overspeed":[309.3967,0.9834],"g:Pull up":[310.7301,0.7212],"g:Retard":[311.8013,0.8538],"g:Sink rate":[313.005,0.9371],"g:Stall, stall":[314.2921,1.1605],"g:Terrain, terrain":[315.8026,1.4604],"g:Too low, flaps":[317.613,1.3627],"g:Too low, gear":[319.3257,1.4161],"g:Twenty five hundred":[321.0918,1.4996],"g:Two thousand five hundred":[322.9414,1.9368],"g:Eighty knots":[325.2282,0.8189],"g:One hundred knots":[326.3971,1.1699],"g:Positive rate":[327.917,1.021],"g:Rotate":[329.2879,0.725],"g:Seventy knots":[330.3629,0.9653],"g:Sixty knots":[331.6782,0.9244],"g:V one":[332.9526,0.6995],"p:birds":[334.0021,0.6262],"p:brace_pa":[334.9783,2.0256],"p:fire_pa":[337.354,6.9006],"p:mayday":[344.6046,3.4037],"k:arrive":[348.3582,10.4688],"k:brace":[359.1771,2.2939],"k:descent":[361.821,5.7544],"k:ditch_evac":[367.9254,2.6605],"k:evac":[370.936,3.0358],"k:prep_land":[374.3217,2.8294],"k:welcome_arctica":[377.5011,11.347],"k:welcome_avgeeks":[389.1981,11.3629],"k:welcome_backcountry":[400.911,11.5773],"k:welcome_belta":[412.8383,11.1662],"k:welcome_british":[424.3546,11.7211],"k:welcome_cryanair":[436.4257,11.4134],"k:welcome_dunes":[448.189,11.1071],"k:welcome_freedom":[459.6462,11.4089],"k:welcome_jetbloo":[471.4051,11.3254],"k:welcome_lioncity":[483.0805,11.575],"k:welcome_loofthansa":[495.0055,11.6107],"k:welcome_namaste":[506.9662,11.2432],"k:welcome_northeast":[518.5595,11.2729],"k:welcome_roo":[530.1824,11.0147],"k:welcome_spiritless":[541.547,11.4697],"k:welcome_untied":[553.3668,11.3462]};let v3=null,v3P=null;const v3Busy={};
+const V3={"c:Aarctica":[0.35,0.7493],"c:Aavgeeks":[1.4493,0.644],"c:Abackcountry":[2.4432,0.8171],"c:Abelta":[3.6103,0.6383],"c:Abritish":[4.5986,0.6585],"c:Acryanair":[5.6072,0.6619],"c:Adunes":[6.619,0.5938],"c:Afreedom":[7.5629,0.6284],"c:Ajetbloo":[8.5413,0.7489],"c:Alioncity":[9.6402,0.8268],"c:Aloofthansa":[10.817,0.8266],"c:Anamaste":[11.9936,0.6143],"c:Anortheast":[12.9579,0.7279],"c:Aroo":[14.0358,0.452],"c:Aspiritless":[14.8378,0.7518],"c:Auntied":[15.9396,0.6653],"c:D0":[16.9549,0.5545],"c:D1":[17.8593,0.4524],"c:D2":[18.6617,0.451],"c:D3":[19.4627,0.4928],"c:D4":[20.3055,0.4808],"c:D5":[21.1363,0.4605],"c:D6":[21.9468,0.4893],"c:D7":[22.786,0.5674],"c:D8":[23.7035,0.4235],"c:D9":[24.4769,0.5509],"c:R01":[25.3778,0.7654],"c:R01C":[26.4932,1.1787],"c:R01L":[28.022,1.1119],"c:R01R":[29.4838,1.0767],"c:R02":[30.9105,0.8681],"c:R02C":[32.1286,1.1819],"c:R02L":[33.6605,1.0674],"c:R02R":[35.0779,0.9985],"c:R03":[36.4265,0.934],"c:R03L":[37.7105,1.0966],"c:R03R":[39.1571,1.1405],"c:R04":[40.6477,0.9059],"c:R04C":[41.9035,1.2145],"c:R04L":[43.4681,1.1223],"c:R04R":[44.9404,1.0822],"c:R05":[46.3725,0.9325],"c:R05C":[47.655,1.2104],"c:R05L":[49.2154,1.1873],"c:R05R":[50.7527,1.19],"c:R06":[52.2927,0.8988],"c:R06C":[53.5416,1.1917],"c:R06L":[55.0832,1.1562],"c:R06R":[56.5895,1.0501],"c:R07":[57.9895,0.9317],"c:R07C":[59.2712,1.2863],"c:R07L":[60.9075,1.198],"c:R07R":[62.4555,1.132],"c:R08":[63.9375,0.8142],"c:R08L":[65.1017,1.1043],"c:R08R":[66.556,1.0992],"c:R09":[68.0052,0.8826],"c:R09C":[69.2378,1.2517],"c:R09L":[70.8395,1.2065],"c:R09R":[72.396,1.215],"c:R10":[73.961,1.1527],"c:R10C":[75.4638,1.5654],"c:R10L":[77.3792,1.4848],"c:R10R":[79.2139,1.4528],"c:R11":[81.0167,0.973],"c:R11L":[82.3397,1.2825],"c:R11R":[83.9722,1.2448],"c:R12":[85.567,0.9841],"c:R12L":[86.9012,1.2525],"c:R12R":[88.5036,1.2383],"c:R13":[90.0919,1.056],"c:R13C":[91.4979,1.3775],"c:R13L":[93.2254,1.301],"c:R13R":[94.8763,1.2473],"c:R14":[96.4736,1.0356],"c:R14L":[97.8593,1.3328],"c:R14R":[99.542,1.2737],"c:R15":[101.1658,1.121],"c:R15L":[102.6368,1.3765],"c:R15R":[104.3633,1.3655],"c:R16":[106.0788,1.0927],"c:R16C":[107.5215,1.3576],"c:R16L":[109.2291,1.3447],"c:R16R":[110.9237,1.2571],"c:R17":[112.5308,1.1013],"c:R17C":[113.9821,1.5445],"c:R17L":[115.8766,1.4607],"c:R17R":[117.6873,1.2924],"c:R18":[119.3297,1.0312],"c:R18C":[120.711,1.28],"c:R18L":[122.341,1.2375],"c:R18R":[123.9285,1.196],"c:R19":[125.4745,1.1258],"c:R19C":[126.9502,1.5132],"c:R19L":[128.8135,1.4199],"c:R19R":[130.5834,1.4732],"c:R20":[132.4065,1.1519],"c:R20C":[133.9085,1.5468],"c:R20L":[135.8053,1.4654],"c:R20R":[137.6207,1.3757],"c:R21":[139.3464,1.0473],"c:R21L":[140.7437,1.3473],"c:R21R":[142.441,1.1812],"c:R22":[143.9723,1.0417],"c:R22C":[145.364,1.3802],"c:R22L":[147.0942,1.305],"c:R22R":[148.7492,1.2564],"c:R23":[150.3556,1.0883],"c:R23C":[151.7939,1.4075],"c:R23L":[153.5513,1.3515],"c:R23R":[155.2529,1.2827],"c:R24":[156.8855,1.0546],"c:R24C":[158.2901,1.4094],"c:R24L":[160.0495,1.3273],"c:R24R":[161.7268,1.2343],"c:R25":[163.3111,1.1477],"c:R25C":[164.8088,1.4835],"c:R25L":[166.6422,1.3979],"c:R25R":[168.3902,1.3324],"c:R26":[170.0726,1.1257],"c:R26L":[171.5483,1.3781],"c:R26R":[173.2764,1.2914],"c:R27":[174.9178,1.1669],"c:R27C":[176.4347,1.5294],"c:R27L":[178.314,1.4703],"c:R27R":[180.1343,1.3817],"c:R28":[181.866,1.0039],"c:R28C":[183.2199,1.311],"c:R28L":[184.8809,1.3024],"c:R28R":[186.5333,1.2902],"c:R29":[188.1735,1.0848],"c:R29L":[189.6083,1.3719],"c:R29R":[191.3302,1.432],"c:R30":[193.1122,1.2103],"c:R30L":[194.6725,1.5357],"c:R30R":[196.5582,1.4425],"c:R31":[198.3508,1.1009],"c:R31C":[199.8016,1.4512],"c:R31L":[201.6028,1.419],"c:R31R":[203.3717,1.382],"c:R32":[205.1038,1.0698],"c:R32L":[206.5236,1.3301],"c:R32R":[208.2037,1.3065],"c:R33":[209.8602,1.1371],"c:R33L":[211.3473,1.4015],"c:R33R":[213.0988,1.3325],"c:R34":[214.7813,1.1154],"c:R34C":[216.2467,1.41],"c:R34L":[218.0068,1.3509],"c:R34R":[219.7077,1.2828],"c:R35":[221.3405,1.1876],"c:R35C":[222.8781,1.4826],"c:R35L":[224.7107,1.4261],"c:R35R":[226.4868,1.4134],"c:R36":[228.2501,1.1683],"c:R36C":[229.7684,1.3882],"c:R36L":[231.5067,1.4229],"c:R36R":[233.2795,1.3135],"c:at":[234.943,0.3006],"c:contact_dep":[235.5937,3.4273],"c:ctl":[239.371,0.9275],"c:ctl_emerg":[240.6485,4.3159],"c:cto":[245.3144,1.1424],"c:desc3":[246.8068,1.9765],"c:ditch_ack":[249.1333,4.5592],"c:fl":[254.0425,0.7676],"c:gnd_push":[255.16,3.2287],"c:ils":[258.7387,1.4753],"c:lineup":[260.564,1.6455],"c:mayday_ack":[262.5595,9.0185],"c:panpan_ack":[271.9281,7.4925],"c:radar":[279.7706,2.2202],"c:rescue":[282.3408,4.7851],"c:taxi_to":[287.4758,0.7667],"c:thousand":[288.5925,0.6636],"c:vacate":[289.6061,3.6179],"c:via":[293.574,1.5031],"c:wind":[295.4271,0.5328],"g:Approaching minimums":[296.3099,1.533],"g:Bank angle, bank angle":[298.1929,1.9641],"g:Engine 1 fire":[300.507,1.8377],"g:Engine 2 fire":[302.6947,1.6873],"g:Engine 3 fire":[304.732,1.8172],"g:Engine 4 fire":[306.8992,1.7803],"g:Engine failure":[309.0296,1.4173],"g:Glideslope":[310.7969,0.966],"g:Hundred above":[312.1129,1.0987],"g:Minimum":[313.5616,0.7347],"g:Minimums":[314.6463,0.7883],"g:One thousand":[315.7846,1.1046],"g:Overspeed":[317.2392,0.9834],"g:Pull up":[318.5726,0.7212],"g:Retard":[319.6438,0.8538],"g:Sink rate":[320.8475,0.9371],"g:Stall, stall":[322.1346,1.1605],"g:Terrain, terrain":[323.6451,1.4604],"g:Too low, flaps":[325.4555,1.3627],"g:Too low, gear":[327.1682,1.4161],"g:Twenty five hundred":[328.9343,1.4996],"g:Two thousand five hundred":[330.7839,1.9368],"g:Eighty knots":[333.0707,0.8189],"g:One hundred knots":[334.2396,1.1699],"g:Positive rate":[335.7595,1.021],"g:Rotate":[337.1304,0.725],"g:Seventy knots":[338.2054,0.9653],"g:Sixty knots":[339.5207,0.9244],"g:V one":[340.7951,0.6995],"p:birds":[341.8446,0.6262],"p:brace_pa":[342.8208,2.0256],"p:fire_pa":[345.1965,6.9006],"p:gear_pa":[352.4471,6.7152],"p:mayday":[359.5122,3.4037],"p:mayday_eng":[363.2659,3.5976],"p:mayday_gear":[367.2135,6.0277],"p:panpan_flaps":[373.5912,4.4794],"p:panpan_hyd":[378.4206,5.04],"k:arrive":[383.8106,10.4688],"k:brace":[394.6295,2.2939],"k:descent":[397.2734,5.7544],"k:ditch_evac":[403.3778,2.6605],"k:evac":[406.3883,3.0358],"k:prep_land":[409.7741,2.8294],"k:welcome_arctica":[412.9535,11.347],"k:welcome_avgeeks":[424.6505,11.3629],"k:welcome_backcountry":[436.3634,11.5773],"k:welcome_belta":[448.2907,11.1662],"k:welcome_british":[459.807,11.7211],"k:welcome_cryanair":[471.878,11.4134],"k:welcome_dunes":[483.6414,11.1071],"k:welcome_freedom":[495.0985,11.4089],"k:welcome_jetbloo":[506.8575,11.3254],"k:welcome_lioncity":[518.5328,11.575],"k:welcome_loofthansa":[530.4578,11.6107],"k:welcome_namaste":[542.4186,11.2432],"k:welcome_northeast":[554.0118,11.2729],"k:welcome_roo":[565.6348,11.0147],"k:welcome_spiritless":[576.9994,11.4697],"k:welcome_untied":[588.8192,11.3462]};let v3=null,v3P=null;const v3Busy={};
 function loadV3(){if(v3)return Promise.resolve(v3);if(v3P)return v3P;v3P=fetch('voice3.mp3').then(r=>{if(!r.ok)throw 0;return r.arrayBuffer();}).then(ab=>new Promise((ok,no)=>{const p=ctx().decodeAudioData(ab,ok,no);if(p&&p.then)p.then(ok,no);})).then(buf=>(v3={buf}));v3P.catch(()=>{v3P=null;});return v3P;}
 function hasV3(keys){return keys.every(k=>V3[k]);}
 async function playV3(keys,ch){if(!FLY.sound)return;let v;try{v=await loadV3();}catch(e){return;}const ac=ctx();let t=ch==='gpws'?ac.currentTime+.03:Math.max(ac.currentTime+.03,v3Busy[ch]||0);
@@ -2858,7 +2972,9 @@ function pushStep(dt){const st=S,P=st.push,pb=st.pb,tot=pb.S1+pb.S2;P.u=Math.min
 // ===== failures =====
 function failTick(st,p){if(!FLY.fail||st.failDone||st.push||st.atGate)return;if(st.failAlt==null){st.failAlt=Math.random()*1100;st.failAt=st.t+6+Math.random()*12;}
   const ra=st.y/FT,kt=st.V/KT;let go;if(FLY.mode==='landing')go=!st.ground&&st.t>st.failAt;else go=kt>p.vr-6&&(st.lined!==false)&&(st.ground?st.failAlt<120:ra>st.failAlt);
-  if(!go||!planeObj)return;emergStart(st,p);}
+  if(!go||!planeObj)return;const r=Math.random(),m=FLY.mode,gearOK=!p.fixedGear,flapOK=!p.noFlaps&&!p.prop;
+  const kind=m==='takeoff'?(r<.55?'birds':r<.75?'engine':'hyd'):m==='landing'?(r<.3?'birds':r<.55&&gearOK?'gear':r<.75&&flapOK?'flaps':r<.88?'hyd':'engine'):(r<.4?'birds':r<.6&&gearOK?'gear':r<.75&&flapOK?'flaps':r<.88?'hyd':'engine');
+  st.failKind=kind;if(kind==='birds')emergStart(st,p);else failStart(st,p,kind);}
 // ===== weather fx =====
 let HEMIB=.8,LFL=0;function wxTick(dt){if(!S||!running||!WX.rain||!HEMI)return;if(!S.ltN)S.ltN=S.t+4+Math.random()*10;
   if(S.t>S.ltN){S.ltN=S.t+6+Math.random()*14;LFL=.28;const d=.8+Math.random()*2.5;setTimeout(thunder,d*1000);}
@@ -2991,7 +3107,7 @@ function buildTerminal(side,APZ,TX,twd){
   {const rg=new L.CylinderGeometry(70,70,len+16,32,1,true,-.5,1);const r=new L.Mesh(rg,roofM);r.rotation.x=Math.PI/2;r.rotation.y=0;r.position.set(side+38,18-70*Math.cos(.5)+0,zc);r.material.side=L.DoubleSide;G.add(r);}
   add(box(70,1.2,len+16),roofM,side+36,18.4,zc,0,true);
   // control tower-ish sign block
-  {const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');x.fillStyle='#0d1218';x.fillRect(0,0,512,96);x.fillStyle='#ffb627';x.font='900 60px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText((FLY.ap&&FLY.ap.iata||'AVN')+' INTERNATIONAL',256,50);
+  {const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');x.fillStyle='#0d1218';x.fillRect(0,0,512,96);x.fillStyle='#ffb627';const tn=(FLY.ap&&FLY.ap.iata||'AVN')+' INTERNATIONAL';x.font='900 60px Arial';const tw=x.measureText(tn).width;if(tw>480)x.font=`900 ${Math.floor(60*480/tw)}px Arial`;x.textAlign='center';x.textBaseline='middle';x.fillText(tn,256,50);
     const t=cTex(c);const sg=new L.Mesh(new L.PlaneGeometry(64,12),new L.MeshBasicMaterial({map:t}));sg.position.set(side+7.5,24,zc);sg.rotation.y=-Math.PI/2;G.add(sg);add(box(1,12.6,64.6),darkM,side+8.3,24,zc);}
   // piers with gates (fingers out toward the apron) + jet bridges to every stand
   const bridgeM=lam(0xc4cad1),tunnelG=new L.MeshStandardMaterial({color:0x8aa1b8,roughness:.2,metalness:.5});
@@ -3079,12 +3195,14 @@ function ensureRenderer(){
   if(R3)return;
   R3=new T3.WebGLRenderer({canvas:$('flycv'),antialias:true,powerPreference:'high-performance'});toneR(R3,.82);R3.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
   R3.shadowMap.enabled=true;R3.shadowMap.type=T3.PCFSoftShadowMap;
-  scene=new T3.Scene();scene.fog=new T3.Fog(0xd3e8fb,3500,16500);
+  // the WebGL renderer is freed between flights (iPad memory); the scene and everything parked in it lives on
+  if(!scene){scene=new T3.Scene();scene.fog=new T3.Fog(0xd3e8fb,3500,16500);
   SKY=skyMesh(24000);scene.add(SKY);
   camera=new T3.PerspectiveCamera(62,1,1,30000);camera.rotation.order='YXZ';
   HEMI=new T3.HemisphereLight(0xe4f0ff,0x5d6b48,.8);scene.add(HEMI);
   SUN=new T3.DirectionalLight(0xfff1dc,1.05);SUN.castShadow=true;SUN.shadow.mapSize.set(2048,2048);SUN.shadow.bias=-.0004;SUN.shadow.normalBias=.04;scene.add(SUN);scene.add(SUN.target);
-  new ResizeObserver(fitRenderer).observe($('fly'));fitRenderer();
+  new ResizeObserver(()=>fitRenderer()).observe($('fly'));}
+  fitRenderer();
 }
 function fitRenderer(){if(!R3)return;const el=$('fly'),w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;R3.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 
@@ -3134,8 +3252,8 @@ function stepPhysics(dt){
     if(!st.rotV&&st.th>2*D2R)st.rotV=V/KT;
     if(Lacc>G*1.0&&V>Vs*.9){st.ground=false;st.gam=.01;st.liftT=st.t;st.y=Math.max(st.y,GC.zm*Math.sin(st.th)+GC.drop*(st.gear?1:0)+.05);if(!st.liftV)st.liftV=V/KT;toast('Positive rate');}
   }else{st.spoil=0;
-    st.th+=st.qd*p.pitch*D2R*eff*dt;st.th=Math.max(-15*D2R,Math.min(25*D2R,st.th));
-    st.ph+=st.pd*p.roll*D2R*eff*dt;if(Math.abs(rollIn)<.05)st.ph-=st.ph*.25*dt;st.ph=Math.max(-60*D2R,Math.min(60*D2R,st.ph));
+    const hk=st.hydFail?.42:1;st.th+=st.qd*p.pitch*D2R*eff*dt*hk;st.th=Math.max(-15*D2R,Math.min(25*D2R,st.th));
+    st.ph+=st.pd*p.roll*D2R*eff*dt*(st.hydFail?.42:1);if(Math.abs(rollIn)<.05)st.ph-=st.ph*.25*dt;st.ph=Math.max(-60*D2R,Math.min(60*D2R,st.ph));
     st.V+=(thrust-D-G*Math.sin(st.gam))*dt;st.V=Math.max(st.V,5);
     st.gam+=((Lacc*Math.cos(st.ph)-G*Math.cos(st.gam))/V)*dt;st.gam=Math.max(-80*D2R,Math.min(80*D2R,st.gam));
     st.psi+=(Lacc*Math.sin(st.ph)/(V*Math.max(.2,Math.cos(st.gam))))*dt+inp.yaw*.06*dt;
@@ -3158,6 +3276,7 @@ function touchdown(){
   const st=S,p=pl(),vs=st.V*Math.sin(st.gam)/FT*60,bank=Math.abs(st.ph)/D2R;
   st.tdVs=vs;st.tdX=st.x;st.tdZ=-st.z;
   if(vs<-1000)return crash('Hard crash',`Touched down at ${Math.round(-vs)} fpm. Aim for under 600.`);
+  if(!st.gear&&st.gearFail&&vs>-700&&bank<12&&onRunway(st.x,st.z))return bellyLand();
   if(!st.gear)return crash('Gear-up landing','The belly scraped down the runway. Drop the gear (G) before landing.');
   if(bank>12)return crash('Wingtip strike',`Banked ${Math.round(bank)}° at touchdown. Level the wings first.`);
   if(!onRunway(st.x,st.z))return crash('Off the runway','You landed in the grass. Line up with the centerline.');
@@ -3189,10 +3308,10 @@ function flamesClear(){FLAMES.forEach(f=>{if(scene)scene.remove(f.s);});FLAMES=[
 function birdMesh(){const g=new T3.Group(),m=new T3.MeshBasicMaterial({color:0x2a2622,side:T3.DoubleSide});const body=new T3.Mesh(new T3.SphereGeometry(.18,6,4),m);body.scale.set(1,.8,2.2);g.add(body);
   [1,-1].forEach(s=>{const w=new T3.Mesh(new T3.PlaneGeometry(.75,.3),m);w.geometry.translate(s*.38,0,0);w.rotation.x=-Math.PI/2;const p=new T3.Group();p.add(w);p.userData.s=s;g.add(p);});return g;}
 function emergStart(st,p){const ne=Math.max(1,p.eng||1);st.failDone=true;const eo=Math.floor(Math.random()*ne);st.emerg=true;const D=engD(),side=(engPos(eo).clone().sub(planeObj.position).dot(pAxes().r))>=0?1:-1,birds=[],objs=[];
-  const n=p.prop?5:9;for(let i=0;i<n;i++){const b=birdMesh();b.scale.setScalar(Math.max(1.4,D*.55));scene.add(b);objs.push(b);birds.push({m:b,off:new T3.Vector3((Math.random()-.5)*D*4,(Math.random()-.5)*D*2.5,-i*D*.7),hit:i<4,ph:Math.random()*6});}
+  const n=p.prop?5:9;for(let i=0;i<n;i++){const b=birdMesh();b.scale.setScalar(Math.max(1.4,D*.55));scene.add(b);objs.push(b);birds.push({m:b,off:new T3.Vector3((Math.random()-.5)*D*2.6,(Math.random()-.5)*D*1.4,-i*D*.6),hit:i<6,ph:Math.random()*6});}
   let hit=false;
   startCut({dur:6.2,cap:'',sub:'',cam:(t)=>{const a=pAxes(),E=engPos(eo),k=7.5-Math.min(t,3)*.6;return{pos:E.clone().addScaledVector(a.r,side*D*k).addScaledVector(a.f,D*2.6).addScaledVector(a.u,D*.6),look:E.clone().addScaledVector(a.f,D*1.4),fov:52};},
-    tick:(dt,t)=>{const a=pAxes(),E=engPos(eo);birds.forEach(b=>{if(!b.m.visible)return;const u=Math.min(1,t/2.6),start=E.clone().addScaledVector(a.f,D*22).addScaledVector(a.r,b.off.x).addScaledVector(a.u,b.off.y+D).addScaledVector(a.f,b.off.z),end=b.hit?E.clone().addScaledVector(a.r,b.off.x*.08).addScaledVector(a.u,b.off.y*.08):E.clone().addScaledVector(a.f,-D*6).addScaledVector(a.r,b.off.x*1.8+side*D*2).addScaledVector(a.u,b.off.y+D*1.5);
+    tick:(dt,t)=>{const a=pAxes(),E=engPos(eo);birds.forEach(b=>{if(!b.m.visible)return;const u=Math.min(1,t/2.6),start=E.clone().addScaledVector(a.f,D*22).addScaledVector(a.r,b.off.x).addScaledVector(a.u,b.off.y).addScaledVector(a.f,b.off.z),end=b.hit?E.clone().addScaledVector(a.r,b.off.x*.06).addScaledVector(a.u,b.off.y*.06).addScaledVector(a.f,D*.1):E.clone().addScaledVector(a.f,-D*6).addScaledVector(a.r,(b.off.x>=0?1:-1)*D*1.6+b.off.x).addScaledVector(a.u,-D*.4);
         b.m.position.lerpVectors(start,end,b.hit?u:Math.min(1,t/3.6));b.m.lookAt(E.clone().addScaledVector(a.f,-1e3));b.m.children.slice(1).forEach(w=>w.rotation.z=w.userData.s*Math.sin(t*22+b.ph)*.7);if(b.hit&&u>=1)b.m.visible=false;});
       if(t>1.9&&!st._birdSaid){st._birdSaid=1;vSay('atc','CAPTAIN','Birds!','p:birds');}
       if(t>=2.6&&!hit){hit=true;st.engOut=eo;st.fire=!p.prop;st.shake=1.4;crashFlash();for(let i=0;i<2;i++)smokeBurst(E.clone().addScaledVector(a.f,-D*(1+i*.8)),2,D*.5);alertTone('bell');setTimeout(()=>alertTone('bell'),1300);cutCap('BIRD STRIKE',p.prop?'Engine failure':'Engine '+(st.engOut+1)+' is on fire');setTimeout(()=>gpwsSay(p.prop?'Engine failure':'Engine '+(st.engOut+1)+' fire',1),500);}},
@@ -3201,6 +3320,27 @@ function emergStart(st,p){const ne=Math.max(1,p.eng||1);st.failDone=true;const e
       vSay('atc','CAPTAIN',p.prop?'Mayday, mayday, mayday. Engine failure. Requesting immediate return.':'Mayday, mayday, mayday. Engine fire. Requesting immediate return.',p.prop?null:'p:mayday',900);
       vSay('atc','TOWER','Mayday acknowledged. You have priority. Turn and descend at your discretion, runway of your choice. Emergency vehicles are standing by.','c:mayday_ack',7500);
       vSay('atc','CAPTAIN','Ladies and gentlemen, this is the captain. We have a problem with one of our engines. Please stay seated and follow crew instructions.','p:fire_pa',17000);}});}
+function failStart(st,p,kind){st.failDone=true;st.emerg=true;alertTone('chime');setTimeout(()=>alertTone('chime'),900);
+  if(kind==='engine'){const ne=Math.max(1,p.eng||1);st.engOut=Math.floor(Math.random()*ne);setTimeout(()=>gpwsSay('Engine failure',1),500);
+    startCut({dur:3.6,cap:'ENGINE FAILURE',sub:p.prop?'The engine quit':'Engine '+(st.engOut+1)+' flamed out',cam:(t)=>{const a=pAxes(),E=engPos(st.engOut),D=engD();return{pos:E.clone().addScaledVector(a.r,(E.clone().sub(planeObj.position).dot(a.r)>=0?1:-1)*D*6).addScaledVector(a.f,D*2).addScaledVector(a.u,D*.5),look:E,fov:50};},
+      tick:(dt,t)=>{if(t<1.2&&Math.random()<dt*20)smokeBurst(engPos(st.engOut),1,engD()*.5,0x6a6a6a);},
+      end:()=>{toast(p.prop?'ENGINE FAILURE · fly the plane, find a field':'ENG '+(st.engOut+1)+' FAILED · use rudder, land as soon as possible',true);vSay('atc','CAPTAIN','Mayday, mayday, mayday. Engine failure. Requesting immediate return.','p:mayday_eng',900);vSay('atc','TOWER','Mayday acknowledged. You have priority. Turn and descend at your discretion, runway of your choice. Emergency vehicles are standing by.','c:mayday_ack',7000);}});}
+  else if(kind==='gear'){st.gearFail=true;const wasDown=st.gear;if(wasDown&&!st.ground){st.gear=false;}
+    toast(wasDown?'GEAR UNSAFE · gear went back up · tap GEAR for gravity extension':'GEAR FAULT detected · the gear may not come down',true);
+    if(wasDown)gearCut('GEAR UNSAFE','Gear not locked · try the gravity extension');}
+  else if(kind==='flaps'){st.flapJam=st.flaps;toast('FLAPS JAMMED at '+(['UP','1','2','FULL'][st.flaps]||st.flaps)+' · land faster than normal',true);
+    vSay('atc','CAPTAIN','Pan-pan, pan-pan, pan-pan. Flap malfunction. Requesting a long straight-in approach.','p:panpan_flaps',900);vSay('atc','TOWER','Pan-pan acknowledged. Fly heading of your choice, any runway, cleared to land. Emergency vehicles are standing by.','c:panpan_ack',6500);}
+  else if(kind==='hyd'){st.hydFail=true;toast('HYDRAULIC FAILURE · controls are heavy and slow',true);setTimeout(()=>alertTone('bell'),300);
+    vSay('atc','CAPTAIN','Pan-pan, pan-pan, pan-pan. Hydraulic failure. Controls are heavy, requesting a long final.','p:panpan_hyd',900);vSay('atc','TOWER','Pan-pan acknowledged. Fly heading of your choice, any runway, cleared to land. Emergency vehicles are standing by.','c:panpan_ack',6500);}}
+// camera under the belly looking at the main gear doors
+function gearCut(cap,sub,end){const p=pl();startCut({dur:3.8,cap,sub,cam:(t)=>{const a=pAxes(),c=planeObj.position.clone(),R=(GEO[FLY.plane]||{R:2}).R,zm=(GC&&GC.zm)||0;const tgt=c.clone().addScaledVector(a.f,-zm).addScaledVector(a.u,-R*.9);return{pos:tgt.clone().addScaledVector(a.u,-R*2.2-p.gearH).addScaledVector(a.f,-p.len*(.18+t*.02)).addScaledVector(a.r,R*.6),look:tgt,fov:55};},end});}
+// gravity (alternate) gear extension after a gear fault
+function gearAltExtend(){const st=S;if(!st||st.gearAltBusy)return;st.gearAltBusy=true;toast('Gravity extension… gear free-falling');thunk(4);
+  setTimeout(()=>{if(S!==st)return;st.gearAltBusy=false;if(Math.random()<.6){st.gearFail=false;st.gear=true;toast('GEAR DOWN AND LOCKED ✅ (gravity extension)');gearCut('GEAR DOWN','Gravity extension worked · three green');}
+    else{st.gearTries=(st.gearTries||0)+1;if(st.gearTries>=2){st.bellyPrep=true;toast('GEAR STILL UNSAFE · prepare for a belly landing',true);vSay('atc','CAPTAIN','Mayday, mayday, mayday. Our landing gear will not extend. Requesting the longest runway and emergency services.','p:mayday_gear',600);vSay('atc','TOWER','Mayday acknowledged. You have priority. Turn and descend at your discretion, runway of your choice. Emergency vehicles are standing by.','c:mayday_ack',7500);vSay('atc','CAPTAIN','Ladies and gentlemen, this is the captain. We have a problem with our landing gear. The crew will prepare you for an emergency landing.','p:gear_pa',16000);}
+      else toast('Gear still unsafe · tap GEAR to try again',true);}},9000);}
+function bellyLand(){const st=S;st.belly=true;st.done=true;running=false;try{crashFX('Belly landing');}catch(e){}vSay('cabin','CABIN','Evacuate! Evacuate! Leave everything, come this way!','k:evac',2500);
+  setTimeout(()=>{if(S===st)endFlight({ok:true,belly:true,title:'Belly landing ✅',msg:'The gear never came down, but you slid it in on the runway and everyone walked away. Insane flying.'});},6500);}
 function fireBottle(){const st=S;if(!st||!st.fire||st.bottle)return;st.bottle=true;toast('Fire bottle discharged…');alertTone('chime');setTimeout(()=>{if(S!==st)return;st.fire=false;st.fireOut=true;const b=$('bFire');if(b)b.hidden=true;toast('ENG '+(st.engOut+1)+' fire out ✅ · land as soon as possible');},2600);}
 // emergency approach calls: priority landing clearance + brace
 function emergCalls(st){if(!st.emerg||st.ground||st.done)return;const agl=st.y/FT,onFinal=st.z>0&&st.z<15000&&Math.abs(st.x)<3500&&(FLY.mode!=='route'||st.arr);
@@ -3320,11 +3460,12 @@ function checkGoals(){
   if(st.V>pl().vmax*KT*1.08&&(!st.calls.os||st.t-st.calls.os>3)){st.calls.os=st.t;toast('Overspeed',true);}
 }
 function endFlight(res){
-  if(res&&res.ok&&S&&S.emerg&&!S.evacDone&&!res.ditch&&!isTO()&&planeObj){S.evacDone=true;try{evacCut(res);return;}catch(e){}}
+  if(res&&res.ok&&S&&S.emerg&&!S.evacDone&&!res.ditch&&!res.belly&&!isTO()&&planeObj){S.evacDone=true;try{evacCut(res);return;}catch(e){}}
   if(CUT)endCut(true);
   const st=S,p=pl();stopSound();
   let grade='',rows=[],rows0=[];
-  if(res.ditch){grade='A+';$('resT').textContent=res.title;rows=[['What happened',res.msg],['Touchdown',Math.round(-(st.dV!=null?st.vsD||0:0))+' fpm'],['Rescue','🚁 Everyone safe']];}
+  if(res.belly){grade='A';$('resT').textContent=res.title;rows=[['What happened',res.msg],['Touchdown',Math.round(-(st.tdVs||0))+' fpm'],['Evacuation','🧯 Everyone got out safely']];}
+  else if(res.ditch){grade='A+';$('resT').textContent=res.title;rows=[['What happened',res.msg],['Touchdown',Math.round(-(st.dV!=null?st.vsD||0:0))+' fpm'],['Rescue','🚁 Everyone safe']];}
   else if(res.ok&&isTO()){
     let pts=100;const rv=st.rotV||st.liftV||0;if(Math.abs(rv-p.vr)>12)pts-=15;if(st.tail)pts-=30;if(st.maxX>8)pts-=15;if(!p.fixedGear&&(st.gearUpAlt==null||st.gearUpAlt>1000))pts-=10;if(FLY.mode==='taxi')rows0=[['Taxi time',(st.lineT||0).toFixed(0)+' s']];
     grade=pts>=90?'A':pts>=75?'B':pts>=60?'C':'D';
@@ -3401,7 +3542,7 @@ function updateScene(dt){
   if(R3)R3.render(scene,camera);
 }
 function fuelHUD(){if(!S||S.fuel==null)return;const f=FUEL[FLY.plane]||[20000,2500],pc=S.fuel/f[0],b=$('hFuelB');b.style.width=Math.round(pc*100)+'%';b.style.background=pc<.08||S.fuel<=0?'#ff5d5d':pc<.2?'#ffb627':'#3ddc84';
-  const h=S.ff>1?S.fuel/S.ff:0;$('hFuelT').textContent=S.fuel<=0?'EMPTY':h?`${Math.floor(h)}h${String(Math.round((h%1)*60)).padStart(2,'0')}`:Math.round(pc*100)+'%';}
+  const h=S.fuel/Math.max(1,(f[1]||2500)*(S.engOut!=null?.85:1));$('hFuelT').textContent=S.fuel<=0?'EMPTY':h?`${Math.floor(h)}h${String(Math.round((h%1)*60)).padStart(2,'0')}`:Math.round(pc*100)+'%';}
 function updateHUD(){fuelHUD();if(S&&S.warp>1){const hn=$('hNavTxt');if(hn)hn.textContent='⏩ SIM ×'+Math.round(SIMR*S.warp).toLocaleString()+' · '+Math.max(0,Math.round(120-(performance.now()-(S.qT0||performance.now()))/1000))+'s left';}
   const st=S;$('hSpd').textContent=Math.round(st.V/KT);$('hAlt').textContent=Math.round(st.y/FT+rw.elev);
   const vs=Math.round(st.V*Math.sin(st.gam)/FT*60/10)*10;$('hVs').textContent=(vs>0?'+':'')+vs;
@@ -3433,8 +3574,8 @@ function readInputs(dt){
     inp.pad={};gp.buttons.forEach((_,i)=>inp.pad[i]=b(i));}
   inp.pitch=Math.max(-1,Math.min(1,pitch));inp.roll=Math.max(-1,Math.min(1,roll));inp.yaw=Math.max(-1,Math.min(1,yaw));inp.brake=brake;
 }
-function cmdGear(){if(!S||S.done)return;if(pl().fixedGear){toast('Fixed gear on this plane');return;}if(S.ground&&S.gear){toast('Can’t raise gear on the ground',true);return;}S.gear=!S.gear;toast(S.gear?'Gear down':'Gear up');thunk(7);}
-function cmdFlaps(d){if(!S||S.done)return;const nf=pl().noFlaps;S.flaps=Math.max(0,Math.min(nf?2:3,S.flaps+d));toast(nf?['Nose UP · visor up','Nose 5° · visor down','Nose 12.5° · landing'][S.flaps]:'Flaps '+S.flaps);}
+function cmdGear(){if(!S||S.done)return;if(pl().fixedGear){toast('Fixed gear on this plane');return;}if(S.ground&&S.gear){toast('Can’t raise gear on the ground',true);return;}if(S.gearFail&&!S.gear){if(!S.gearUnsafeSaid){S.gearUnsafeSaid=1;alertTone('chime');toast('GEAR UNSAFE · gear won’t come down · tap GEAR again for gravity extension',true);gearCut('GEAR UNSAFE','The gear doors opened but nothing came down');return;}gearAltExtend();return;}S.gear=!S.gear;toast(S.gear?'Gear down':'Gear up');thunk(7);}
+function cmdFlaps(d){if(!S||S.done)return;if(S.flapJam!=null){toast('FLAPS JAMMED · they won’t move',true);return;}const nf=pl().noFlaps;S.flaps=Math.max(0,Math.min(nf?2:3,S.flaps+d));toast(nf?['Nose UP · visor up','Nose 5° · visor down','Nose 12.5° · landing'][S.flaps]:'Flaps '+S.flaps);}
 const VIEWS=['cockpit','chase','wing','gear','tower','flyby'];
 function cmdView(){view=VIEWS[(VIEWS.indexOf(view)+1)%VIEWS.length]||'cockpit';toast({cockpit:'Cockpit view',chase:'Chase view',wing:'Wing view',tower:'Tower view',flyby:'Flyby cam',gear:'Gear cam — watch that butter 🧈'}[view]);flyby=null;look.yaw=0;look.pitch=0;$('fly').classList.toggle('cockpit-off',view!=='cockpit');orbit.yaw=0;orbit.pitch=.18;if(S)camera.position.set(S.x,S.y+20,S.z+60);}
 function cmdPause(){if(!S||S.done)return;paused=!paused;$('fPause').hidden=!paused;if(paused)stopSound();else if(FLY.sound)startSound();}
